@@ -1,0 +1,123 @@
+// 打刻ユーティリティ — punch_records への挿入・直近打刻取得
+import { createClient } from "@/lib/supabase/server";
+
+export type PunchType = "clock_in" | "clock_out";
+
+export interface PunchRecord {
+    id: string;
+    punch_type: PunchType;
+    punched_at: string;
+    store_id: string;
+}
+
+export interface StoreInfo {
+    id: string;
+    name: string;
+}
+
+/** 店舗情報を取得する */
+export async function getStoreById(storeId: string): Promise<StoreInfo | null> {
+    const supabase = await createClient();
+    const { data } = await supabase
+        .from("stores")
+        .select("id, name")
+        .eq("id", storeId)
+        .single();
+    return data;
+}
+
+/** 従業員の当該店舗での最新打刻を取得する */
+export async function getLatestPunch(
+    employeeId: string,
+    storeId: string
+): Promise<PunchRecord | null> {
+    const supabase = await createClient();
+    const { data } = await supabase
+        .from("punch_records")
+        .select("id, punch_type, punched_at, store_id")
+        .eq("employee_id", employeeId)
+        .eq("store_id", storeId)
+        .order("punched_at", { ascending: false })
+        .limit(1)
+        .single();
+    return data;
+}
+
+/**
+ * 次に行うべき打刻種別を判定する。
+ * 最新打刻が clock_in → clock_out。それ以外（未打刻・clock_out済み）→ clock_in。
+ */
+export function getNextPunchType(latest: PunchRecord | null): PunchType {
+    if (latest?.punch_type === "clock_in") return "clock_out";
+    return "clock_in";
+}
+
+/** 打刻種別の日本語ラベル */
+export function punchTypeLabel(type: PunchType): string {
+    return type === "clock_in" ? "出勤" : "退勤";
+}
+
+/** 勤務時間（分）を「N時間MM分」形式に変換する */
+export function formatWorkMinutes(minutes: number): string {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    if (h === 0) return `${m}分`;
+    if (m === 0) return `${h}時間`;
+    return `${h}時間${m}分`;
+}
+
+/**
+ * 従業員の打刻履歴を月単位で取得する。
+ * year, month は 1-based（例: 2026年5月 → year=2026, month=5）。
+ */
+export async function getPunchHistory(
+    employeeId: string,
+    year: number,
+    month: number
+) {
+    const supabase = await createClient();
+
+    const start = new Date(Date.UTC(year, month - 1, 1)).toISOString();
+    const end = new Date(Date.UTC(year, month, 1)).toISOString();
+
+    const { data } = await supabase
+        .from("punch_records")
+        .select("id, punch_type, punched_at, store_id, stores(name)")
+        .eq("employee_id", employeeId)
+        .gte("punched_at", start)
+        .lt("punched_at", end)
+        .order("punched_at", { ascending: true });
+
+    return data ?? [];
+}
+
+/**
+ * 月次の勤務時間合計（分）を計算する。
+ * clock_in と clock_out のペアを日付ごとにマッチングして算出する。
+ */
+export function calcMonthlyMinutes(
+    records: { punch_type: string; punched_at: string; store_id: string }[]
+): number {
+    // store_id ごとにグループ化してペアリング
+    const byStore = new Map<string, typeof records>();
+    for (const r of records) {
+        const group = byStore.get(r.store_id) ?? [];
+        group.push(r);
+        byStore.set(r.store_id, group);
+    }
+
+    let totalMinutes = 0;
+    for (const group of byStore.values()) {
+        let pendingIn: Date | null = null;
+        for (const r of group) {
+            if (r.punch_type === "clock_in") {
+                pendingIn = new Date(r.punched_at);
+            } else if (r.punch_type === "clock_out" && pendingIn) {
+                const diff = new Date(r.punched_at).getTime() - pendingIn.getTime();
+                totalMinutes += Math.floor(diff / 60000);
+                pendingIn = null;
+            }
+        }
+    }
+    return totalMinutes;
+}
