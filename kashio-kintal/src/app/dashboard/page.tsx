@@ -1,6 +1,7 @@
-// スタッフ用ダッシュボード（Phase 2 打刻機能で充実させる）
+// スタッフ用ダッシュボード
 import { requireAuth } from "@/lib/auth";
 import { signOut } from "@/app/(auth)/login/actions";
+import Link from "next/link";
 
 export default async function DashboardPage() {
   const user = await requireAuth();
@@ -21,14 +22,20 @@ export default async function DashboardPage() {
           </form>
         </div>
       </header>
-      <main className="px-6 py-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">マイページ</h2>
-        <p className="text-gray-600">
-          ようこそ、{user.email} さん
-        </p>
-        <p className="text-sm text-gray-500 mt-2">
-          Phase 2 以降で打刻・勤怠確認機能を追加します。
-        </p>
+      <main className="px-6 py-6 max-w-lg mx-auto">
+        <h2 className="text-xl font-semibold text-gray-900 mb-6">マイページ</h2>
+        <div className="grid grid-cols-1 gap-4">
+          <Link
+            href="/history"
+            className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-5 py-4 hover:bg-gray-50 transition-colors"
+          >
+            <span className="text-2xl">📋</span>
+            <div>
+              <p className="font-semibold text-gray-900">打刻履歴</p>
+              <p className="text-xs text-gray-500">当月の勤務時間・打刻一覧</p>
+            </div>
+          </Link>
+        </div>
       </main>
     </div>
   );
