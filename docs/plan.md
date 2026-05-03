@@ -20,9 +20,9 @@
 
 ## 現状（Status）
 
-- フェーズ：**Phase 1（開発着手前）**
+- フェーズ：**Phase 2（打刻機能開発中）**
 - ブロッカー：なし
-- 直近の重要決定：DB設計・スコープ・技術スタック確定（2026-04-30〜05-03）
+- 直近の完了：N-001/N-002/N-003（開発環境・DB・認証基盤）✅ 2026-05-04 マージ
 
 ## ロードマップ（概略）
 
@@ -41,85 +41,82 @@
 
 ## Next（自動実行対象：最大3件）
 
-### N-001 開発環境セットアップ
+### B-001 打刻機能 — スマホQRコード打刻（Phase 2）
 
-- **目的**: Next.js プロジェクトを作成し、Supabase・Vercel と接続する
+- **目的**: スマートフォンから QRコード読み込みで出勤・退勤打刻できるようにする
 - **受入条件**:
-  - `npx create-next-app` で App Router 構成のプロジェクトが作成されている
-  - Supabase プロジェクトが作成され、`.env.local` に接続情報が設定されている
-  - Vercel にデプロイされ、`https://<project>.vercel.app` でアクセスできる
-  - `supabase/migrations/` ディレクトリが作成され、初期マイグレーションが適用されている
-  - GitHub Actions（または Vercel の自動デプロイ）が動作確認済み
-- **依存**: なし
-- **触る領域**: プロジェクトルート・`supabase/`・`.env.local`・`package.json`
-- **作業詳細**:
-  1. `npx create-next-app@latest kashio-kintal --typescript --tailwind --app` を実行
-  2. Supabase CLI インストール・`supabase init`
-  3. Supabase ダッシュボードでプロジェクト作成（リージョン: ap-northeast-1）
-  4. `supabase link` でローカルと接続
-  5. Vercel にリポジトリを接続・環境変数を設定
-  6. shadcn/ui の初期設定（`npx shadcn@latest init`）
+  - 店舗ごとの静的 QRコード URL（`/punch/store/{storeId}`）でアクセスできる
+  - 出勤・退勤ボタンで打刻実行、サーバ時刻で記録
+  - 打刻完了画面に種別・時刻・店舗名を表示
+  - スタッフ向けの打刻履歴画面（当月勤務時間・12ヶ月グラフ）が表示される
+  - GPS（オプション・バックグラウンド記録）
+  - `punch_records` テーブルに記録される
+- **依存**: N-003
+- **触る領域**: `src/app/(staff)/punch/`・`src/app/api/punch/`・API Route
+- **テスト**: QRコード打刻・時刻記録・完了画面・エラーハンドリング
 
 ---
+
+### B-002 打刻機能 — iPad打刻（Phase 2）
+
+- **目的**: 店舗の iPad に管理者アカウントでログイン、スタッフ名タップで打刻
+- **受入条件**:
+  - 管理者アカウント自動ログイン・スタッフ一覧表示
+  - スタッフ名タップで出勤/退勤選択画面を表示
+  - 確認文言・出勤/退勤ボタン・完了後自動リセット
+  - 本日未退勤スタッフを上部に表示（赤バッジ）
+  - 打刻忘れ時の文言・修正リンク表示
+  - 複数店舗対応（店舗切り替えドロップダウン）
+- **依存**: B-001
+- **触る領域**: `src/app/(admin)/punch-ipad/`・API Route
+- **テスト**: 打刻フロー・エラーハンドリング・複数店舗
+
+---
+
+## Done（完了・リリース済み）
+
+### N-001 開発環境セットアップ
+
+✅ **完了日**: 2026-05-04（PR #1 マージ）
+
+- Next.js 16 App Router プロジェクト作成（kashio-kintal/）
+- Supabase クライアント実装（client.ts・server.ts）
+- shadcn/ui 初期設定
+- .env.local.example テンプレート作成（実値なし・P-002 遵守）
+- GitHub Actions CI 設定（quality-gate・secret-scan）
+- N-001 受入テスト 18件 全合格
 
 ### N-002 DB マイグレーション（全13テーブル）
 
-- **目的**: `kashio_db_design_v1.0.md` に定義された全テーブルを Supabase に作成する
-- **受入条件**:
-  - 全13テーブルが Supabase 上に作成されている
-  - Row Level Security（RLS）が全テーブルで有効化されている
-  - ロール（owner / manager / sharoushi / staff）に対応した RLS ポリシーが設定されている
-  - `supabase/migrations/` に SQL ファイルが管理されている
-  - `system_settings` テーブルに初期値（深夜割増率1.25・締め日31日・支払日20日など）が投入されている
-- **依存**: N-001
-- **触る領域**: `supabase/migrations/`
-- **作業詳細（テーブル作成順）**:
-  1. マスタ系: `stores` → `employees` → `employee_stores` → `system_settings`
-  2. 認証・ログ系: `users` → `operation_logs`
-  3. 打刻・勤怠系: `punch_records` → `attendance_records` → `attendance_corrections`
-  4. 申請・承認系: `wage_change_requests` → `retirement_requests`
-  5. 月次処理系: `monthly_closes` → `transportation_fees`
+✅ **完了日**: 2026-05-04（PR #1 マージ）
 
----
+- 13テーブル作成：stores・employees・employee_stores・system_settings・punch_records・attendance_records・attendance_corrections・wage_change_requests・retirement_requests・monthly_closes・transportation_fees・users・operation_logs
+- Row Level Security（RLS）全テーブルで有効化
+- ロールベースアクセス制御：owner・manager・sharoushi・staff
+- system_settings 初期データ投入：深夜割増率 1.25・締め日 31・支払日 20
+- N-002 受入テスト 24件 全合格
 
 ### N-003 認証・ロール基盤の実装
 
-- **目的**: Supabase Auth を使ったログイン・ロール分岐・ミドルウェア保護を実装する
-- **受入条件**:
-  - メール + パスワードでログインできる
-  - パスワードリセット（メール送信）が動作する
-  - ロール（owner / manager / sharoushi / staff）に応じてアクセス可能な画面が制限される
-  - 未認証ユーザーは `/login` にリダイレクトされる
-  - Resend を使ったメール送信が動作する（仮パスワード通知・パスワードリセット）
-  - 店長が管理画面からスタッフの仮パスワードを発行できる
-- **依存**: N-002
-- **触る領域**: `src/app/(auth)/`・`src/middleware.ts`・`src/lib/auth.ts`
+✅ **完了日**: 2026-05-04（PR #1 マージ）
+
+- Supabase Auth 統合（Email + Password）
+- ミドルウェア認証（未認証→/login リダイレクト）
+- ロールベースアクセス制御実装（owner/manager/sharoushi/staff）
+- パスワードリセット・仮パスワード発行（Resend 統合）
+- 管理画面でスタッフ仮パスワード発行機能
+- N-003 受入テスト 21件 全合格
 
 ---
 
 ## Backlog（保留・着手待ち）
-
-### B-001 打刻機能 — スマホQRコード打刻（Phase 2）
-
-- QRコード（店舗ごとの静的URL）でアクセスして出勤・退勤打刻
-- サーバ時刻基準・GPS記録（バックグラウンド）
-- 打刻完了画面（種別・時刻・店舗名表示）
-- スタッフ向け打刻履歴画面（当月勤務時間・12ヶ月分）
-- 依存：N-003
-
-### B-002 打刻機能 — iPad打刻（Phase 2）
-
-- 管理者アカウント常時ログイン・スタッフ名タップで打刻
-- 確認文言の表示・出勤/退勤選択・完了後自動リセット
-- 打刻忘れ時の文言表示
-- 依存：B-001
 
 ### B-003 勤怠管理 — 日別ビュー（Phase 3）
 
 - 日付切り替え・未退勤エラー上部表示（赤バッジ）
 - 従業員ごとの出退勤・勤務時間・深夜時間・ステータス表示
 - 修正画面へのリンク
-- 依存：B-001
+- 依存：B-002
 
 ### B-004 勤怠管理 — 人別ビュー（Phase 3）
 
