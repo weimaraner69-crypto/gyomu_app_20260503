@@ -132,26 +132,41 @@ export async function getDailyAttendance(
 
     const employeeIds = empStores.map((es) => es.employee_id);
 
-    // 当日の打刻記録を取得（昇順：最初の打刻を確実に取得するため）
+    // 取得範囲を当日 JST 0:00 〜 翌日 JST 05:00（UTC +5h）まで拡張し、
+    // 日跨ぎ勤務（例: 21:00 出勤→翌 06:00 退勤）の clock_out も拟足する
+    const extendedEnd = new Date(
+        new Date(end).getTime() + 5 * 60 * 60 * 1000
+    ).toISOString();
+
     const { data: punches } = await supabase
         .from("punch_records")
         .select("employee_id, punch_type, punched_at")
         .eq("store_id", storeId)
         .in("employee_id", employeeIds)
         .gte("punched_at", start)
-        .lt("punched_at", end)
+        .lt("punched_at", extendedEnd)
         .order("punched_at", { ascending: true });
 
-    // 各従業員の最初の clock_in と最後の clock_out を集計
+    // 各従業員の最初の clock_in と最後の clock_out を集計。
+    // clock_in は当日範囲（start 〜 end）内のもののみを「当日の出勤」として扱う。
+    // clock_out は拡張範囲内（翌日 JST 05:00 まで）を対象とする。
     const clockInByEmployee = new Map<string, string>();
     const clockOutByEmployee = new Map<string, string>();
 
     for (const p of punches ?? []) {
-        if (p.punch_type === "clock_in" && !clockInByEmployee.has(p.employee_id)) {
+        if (
+            p.punch_type === "clock_in" &&
+            p.punched_at >= start &&
+            p.punched_at < end &&
+            !clockInByEmployee.has(p.employee_id)
+        ) {
             clockInByEmployee.set(p.employee_id, p.punched_at);
         }
-        if (p.punch_type === "clock_out") {
-            // 最後の clock_out を保持（上書き）
+        if (
+            p.punch_type === "clock_out" &&
+            clockInByEmployee.has(p.employee_id)
+        ) {
+            // 当日の出勤に対応する最後の clock_out を保持（上書き）
             clockOutByEmployee.set(p.employee_id, p.punched_at);
         }
     }
@@ -174,7 +189,7 @@ export async function getDailyAttendance(
                 status = "completed";
             } else {
                 status = "working";
-                // 勤務中は現在時刻まので深夜時間を概算
+                // 勤務中は現在時刻までの深夜時間を概算
                 nightMinutes = calcNightMinutes(clockIn, null);
             }
         }

@@ -61,9 +61,11 @@ export function DailyAttendanceClient({
     const router = useRouter();
 
     function navigate(newDate: string, newStoreId: string) {
-        router.push(
-            `/admin/attendance/daily?date=${newDate}&storeId=${newStoreId}`
-        );
+        const params = new URLSearchParams({
+            date: newDate,
+            storeId: newStoreId,
+        });
+        router.push(`/admin/attendance/daily?${params.toString()}`);
     }
 
     const prevDate = getAdjacentDate(dateStr, "prev");
@@ -205,7 +207,7 @@ export function DailyAttendanceClient({
                                     </td>
                                     <td className="px-4 py-3 text-center tabular-nums">
                                         {r.nightMinutes !== null &&
-                                        r.nightMinutes > 0
+                                            r.nightMinutes > 0
                                             ? formatWorkMinutes(r.nightMinutes)
                                             : "—"}
                                     </td>

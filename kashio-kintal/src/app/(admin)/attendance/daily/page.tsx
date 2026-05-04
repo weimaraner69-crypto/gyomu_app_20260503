@@ -18,7 +18,9 @@ export default async function DailyAttendancePage({
     await requireRole(["owner", "manager", "sharoushi"]);
 
     const params = await searchParams;
-    const dateStr = params.date ?? getTodayJST();
+    // dateStr の形式検証：YYYY-MM-DD 以外は当日にフォールバック
+    const rawDate = params.date ?? "";
+    const dateStr = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : getTodayJST();
 
     const stores = await getAllStores();
 
@@ -35,9 +37,11 @@ export default async function DailyAttendancePage({
     const selectedStore = stores.find((s) => s.id === storeId);
 
     if (!selectedStore) {
-        redirect(
-            `/admin/attendance/daily?date=${dateStr}&storeId=${stores[0].id}`
-        );
+        const redirectParams = new URLSearchParams({
+            date: dateStr,
+            storeId: stores[0].id,
+        });
+        redirect(`/admin/attendance/daily?${redirectParams.toString()}`);
     }
 
     const records = await getDailyAttendance(storeId, dateStr);
