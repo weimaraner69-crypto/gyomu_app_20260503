@@ -37,18 +37,23 @@ export async function getDailyAttendance(
 
     const employeeIds = empStores.map((es) => es.employee_id);
 
-    // 取得範囲を当日 JST 0:00 〜翌日 JST 07:00（UTC +7h）まで拡張し、
-    // 日跨ぎ勤務（例: 21:00 出勤→翌 06:00 退勤）の clock_out も補足する
+    // 取得範囲を前日 JST 19:00 ～翌日 JST 07:00 に拡張して、
+    // 日跨ぎ勤務（例: 前日 21:00 出勤→当日 06:00 退勤）の全パターンに対応する
+    const startDate = new Date(start);
+    const extendedStart = new Date(
+        startDate.getTime() - 5 * 60 * 60 * 1000
+    ).toISOString(); // 前日 19:00
+    const endDate = new Date(end);
     const extendedEnd = new Date(
-        new Date(end).getTime() + 7 * 60 * 60 * 1000
-    ).toISOString();
+        endDate.getTime() + 7 * 60 * 60 * 1000
+    ).toISOString(); // 翌日 07:00
 
     const { data: punches, error: punchError } = await supabase
         .from("punch_records")
         .select("employee_id, punch_type, punched_at")
         .eq("store_id", storeId)
         .in("employee_id", employeeIds)
-        .gte("punched_at", start)
+        .gte("punched_at", extendedStart)
         .lt("punched_at", extendedEnd)
         .order("punched_at", { ascending: true });
 
@@ -57,7 +62,7 @@ export async function getDailyAttendance(
     }
 
     // 従業員ごとにペアリングされた clock_in/clock_out を集計。
-    // 当日（start ～ end）内のすべての clock_in を抽出し、各々の clock_out をペアリング。
+    // 前日 19:00 ～当日 24:00 内のすべての clock_in を抽出し、各々の clock_out をペアリング。
     interface PunchPair {
         clockIn: string;
         clockOut: string | null;
@@ -66,11 +71,12 @@ export async function getDailyAttendance(
 
     const startMs = new Date(start).getTime();
     const endMs = new Date(end).getTime();
+    const extendedStartMs = new Date(extendedStart).getTime();
 
-    // 当日範囲内の clock_in をすべて抽出
+    // 前日 19:00 ～当日 24:00 の範囲内で clock_in をすべて抽出
     for (const p of punches ?? []) {
         const pMs = new Date(p.punched_at).getTime();
-        if (p.punch_type === "clock_in" && pMs >= startMs && pMs < endMs) {
+        if (p.punch_type === "clock_in" && pMs >= extendedStartMs && pMs < endMs) {
             const pairs = punchPairsByEmployee.get(p.employee_id) ?? [];
             pairs.push({ clockIn: p.punched_at, clockOut: null });
             punchPairsByEmployee.set(p.employee_id, pairs);
@@ -106,7 +112,13 @@ export async function getDailyAttendance(
             name_kanji: string | null;
             name_kana: string | null;
         } | null;
-        const pairs = punchPairsByEmployee.get(es.employee_id) ?? [];
+        const allPairs = punchPairsByEmployee.get(es.employee_id) ?? [];
+        // 当日の clock_in を持つペアのみを当日ビュー対象とする
+        // （前日の出勤は当日ビューに含めない）
+        const pairs = allPairs.filter((p) => {
+            const pInMs = new Date(p.clockIn).getTime();
+            return pInMs >= startMs && pInMs < endMs;
+        });
 
         let workMinutes: number | null = null;
         let nightMinutes: number | null = null;
@@ -138,7 +150,7 @@ export async function getDailyAttendance(
                             pair.clockOut
                         );
                     } else if (dateStr === todayJST) {
-                        // 当日未退勤の場合のみ現在時刻まで概算
+                        // 当日未退勤の場合のみ現在時刻までの概算
                         const diffMs =
                             Date.now() - new Date(pair.clockIn).getTime();
                         totalWorkMs += diffMs;

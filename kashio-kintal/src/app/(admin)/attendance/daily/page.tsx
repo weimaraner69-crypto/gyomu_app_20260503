@@ -18,13 +18,31 @@ export default async function DailyAttendancePage({
     // dateStr の形式検証：YYYY-MM-DD 以外、または実在しない日付は当日にフォールバック
     // 例: 2026-02-31 は正規表現を通るが実在しないため Date で再検証する
     const rawDate = params.date ?? "";
-    let dateStr = getTodayJST();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+    const todayJST = getTodayJST();
+    let dateStr = todayJST;
+    let isValidDate = true;
+
+    if (rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
         const [y, m, d] = rawDate.split("-").map(Number);
         const dt = new Date(y, m - 1, d);
         if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
             dateStr = rawDate;
+            isValidDate = true;
+        } else {
+            isValidDate = false;
         }
+    } else if (rawDate) {
+        // 不正な形式
+        isValidDate = false;
+    }
+
+    // 不正な dateStr が来た場合は redirect で正規化
+    if (rawDate && !isValidDate) {
+        const redirectParams = new URLSearchParams({
+            date: todayJST,
+            storeId: params.storeId ?? "",
+        });
+        redirect(`/admin/attendance/daily?${redirectParams.toString()}`);
     }
 
     const stores = await getAllStores();
