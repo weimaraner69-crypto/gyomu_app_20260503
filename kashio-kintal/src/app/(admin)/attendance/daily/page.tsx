@@ -38,10 +38,10 @@ export default async function DailyAttendancePage({
 
     // 不正な dateStr が来た場合は redirect で正規化
     if (rawDate && !isValidDate) {
-        const redirectParams = new URLSearchParams({
-            date: todayJST,
-            storeId: params.storeId ?? "",
-        });
+        const redirectParams = new URLSearchParams({ date: todayJST });
+        if (params.storeId) {
+            redirectParams.set("storeId", params.storeId);
+        }
         redirect(`/admin/attendance/daily?${redirectParams.toString()}`);
     }
 

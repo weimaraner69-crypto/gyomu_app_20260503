@@ -113,11 +113,12 @@ export async function getDailyAttendance(
             name_kana: string | null;
         } | null;
         const allPairs = punchPairsByEmployee.get(es.employee_id) ?? [];
-        // 当日の clock_in を持つペアのみを当日ビュー対象とする
-        // （前日の出勤は当日ビューに含めない）
+        // 当日範囲 [start, end) と重なるペアを対象にする
+        // （前日出勤→当日退勤のような日跨ぎ勤務も含める）
         const pairs = allPairs.filter((p) => {
             const pInMs = new Date(p.clockIn).getTime();
-            return pInMs >= startMs && pInMs < endMs;
+            const pOutMs = p.clockOut ? new Date(p.clockOut).getTime() : null;
+            return pInMs < endMs && (pOutMs === null || pOutMs >= startMs);
         });
 
         let workMinutes: number | null = null;
@@ -140,24 +141,29 @@ export async function getDailyAttendance(
                 let totalWorkMs = 0;
                 let totalNightMinutes = 0;
                 for (const pair of pairs) {
+                    const pInMs = new Date(pair.clockIn).getTime();
                     if (pair.clockOut) {
-                        const diffMs =
-                            new Date(pair.clockOut).getTime() -
-                            new Date(pair.clockIn).getTime();
-                        totalWorkMs += diffMs;
-                        totalNightMinutes += calcNightMinutes(
-                            pair.clockIn,
-                            pair.clockOut
-                        );
+                        const pOutMs = new Date(pair.clockOut).getTime();
+                        const overlapStartMs = Math.max(pInMs, startMs);
+                        const overlapEndMs = Math.min(pOutMs, endMs);
+                        if (overlapEndMs > overlapStartMs) {
+                            totalWorkMs += overlapEndMs - overlapStartMs;
+                            totalNightMinutes += calcNightMinutes(
+                                new Date(overlapStartMs).toISOString(),
+                                new Date(overlapEndMs).toISOString()
+                            );
+                        }
                     } else if (dateStr === todayJST) {
-                        // 当日未退勤の場合のみ現在時刻までの概算
-                        const diffMs =
-                            Date.now() - new Date(pair.clockIn).getTime();
-                        totalWorkMs += diffMs;
-                        totalNightMinutes += calcNightMinutes(
-                            pair.clockIn,
-                            null
-                        );
+                        // 当日未退勤の場合のみ現在時刻までの概算（当日範囲でクリップ）
+                        const overlapStartMs = Math.max(pInMs, startMs);
+                        const overlapEndMs = Math.min(Date.now(), endMs);
+                        if (overlapEndMs > overlapStartMs) {
+                            totalWorkMs += overlapEndMs - overlapStartMs;
+                            totalNightMinutes += calcNightMinutes(
+                                new Date(overlapStartMs).toISOString(),
+                                new Date(overlapEndMs).toISOString()
+                            );
+                        }
                     }
                 }
 
