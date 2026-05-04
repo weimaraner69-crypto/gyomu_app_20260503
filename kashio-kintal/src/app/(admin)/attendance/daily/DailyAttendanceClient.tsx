@@ -11,7 +11,7 @@ interface Props {
     stores: StoreOption[];
     selectedStoreId: string;
     dateStr: string; // YYYY-MM-DD (JST)
-    canEdit: boolean; // 社労士は false（閉覧のみ）
+    canEdit: boolean; // 社労士は false（閲覧のみ）
 }
 
 /** ISO UTC → HH:MM（JST）表示 */
