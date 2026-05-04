@@ -98,17 +98,19 @@ export async function getAllStores(): Promise<StoreOption[]> {
 
 /**
  * manager ロールのユーザーが担当する店舗一覧を取得する。
- * employee_stores の有効レコード（valid_to IS NULL）から store_id を取得し、
- * stores テーブルと結合して返す。
+ * employee_stores の有効レコード（valid_from <= today かつ valid_to IS NULL または valid_to >= today）の
+ * 店舗のみ返す。将来所属・退職済みは含めない。
  * 担当店舗なしの場合は空配列を返す。
  */
 export async function getManagerStores(employeeId: string): Promise<StoreOption[]> {
     const supabase = await createClient();
+    const today = new Date().toISOString().slice(0, 10);
     const { data, error } = await supabase
         .from("employee_stores")
         .select("store_id, stores(id, name)")
         .eq("employee_id", employeeId)
-        .is("valid_to", null);
+        .lte("valid_from", today)
+        .or(`valid_to.is.null,valid_to.gte.${today}`);
 
     if (error) {
         throw new Error(`担当店舗取得エラー: ${error.message}`);

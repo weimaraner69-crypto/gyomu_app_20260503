@@ -136,11 +136,14 @@ export async function getStoreEmployeesWithTodayStatus(
     const supabase = await createClient();
     const { start, end } = getTodayUTCRange();
 
-    // 店舗に所属する従業員を取得
+    // 店舗に所属する有効な従業員を取得（valid_to IS NULL = 現在在籍のみ、退職済み・将来所属は除外）
+    const today = new Date().toISOString().slice(0, 10);
     const { data: empStores } = await supabase
         .from("employee_stores")
         .select("employee_id, employees(id, name_kanji, name_kana)")
-        .eq("store_id", storeId);
+        .eq("store_id", storeId)
+        .lte("valid_from", today)
+        .or(`valid_to.is.null,valid_to.gte.${today}`);
 
     if (!empStores || empStores.length === 0) return [];
 

@@ -23,7 +23,7 @@ export interface StoreOption {
  * JST 05:00 = UTC 前日 20:00 に相当する。
  */
 export function getDateUTCRange(dateStr: string): { start: string; end: string } {
-    // JST オフセット 9h から営業日オフセット 5h を差し引いた 4h をUTC基準で加算する
+    // JST オフセット 9h から営業日オフセット 5h を差し引いた 4h をUTC基準で減算する
     const businessDayOffsetMs = 4 * 60 * 60 * 1000; // JST 05:00 = UTC 前日+20h = UTC 当日-4h
     const [year, month, day] = dateStr.split("-").map(Number);
     const start = new Date(Date.UTC(year, month - 1, day) - businessDayOffsetMs).toISOString();

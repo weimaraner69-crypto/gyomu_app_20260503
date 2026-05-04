@@ -175,7 +175,7 @@ describe("buildDailyAttendanceRecords", () => {
     const dateStr = "2026-05-10";
     const { start, end } = getDateUTCRange(dateStr);
 
-    test("前日出勤→当日退勤（05:00 またぎ）は no_punch（lookback なし•護業日基準エラー）となること", () => {
+    test("前日出勤→当日退勤（05:00 またぎ）は no_punch（lookback なし•営業日基準エラー）となること", () => {
         const employees: AttendanceEmployee[] = [
             { employeeId: "e1", employeeName: "前日出勤" },
         ];
