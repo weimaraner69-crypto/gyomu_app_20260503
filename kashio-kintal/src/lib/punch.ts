@@ -1,7 +1,9 @@
-// 打刻ユーティリティ — punch_records への挿入・直近打刻取得
+// 打刻ユーティリティ — punch_records への挿入・直近打刻取得（サーバー専用）
+// 純関数・型は @/lib/punch-utils からも import できます（クライアント側はそちらを使用）。
 import { createClient } from "@/lib/supabase/server";
-
-export type PunchType = "clock_in" | "clock_out";
+export type { PunchType } from "@/lib/punch-utils";
+export { punchTypeLabel, formatWorkMinutes } from "@/lib/punch-utils";
+import type { PunchType } from "@/lib/punch-utils";
 
 export interface PunchRecord {
     id: string;
@@ -53,19 +55,6 @@ export function getNextPunchType(latest: PunchRecord | null): PunchType {
 }
 
 /** 打刻種別の日本語ラベル */
-export function punchTypeLabel(type: PunchType): string {
-    return type === "clock_in" ? "出勤" : "退勤";
-}
-
-/** 勤務時間（分）を「N時間MM分」形式に変換する */
-export function formatWorkMinutes(minutes: number): string {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    if (h === 0) return `${m}分`;
-    if (m === 0) return `${h}時間`;
-    return `${h}時間${m}分`;
-}
-
 /**
  * 従業員の打刻履歴を月単位で取得する。
  * year, month は 1-based（例: 2026年5月 → year=2026, month=5）。

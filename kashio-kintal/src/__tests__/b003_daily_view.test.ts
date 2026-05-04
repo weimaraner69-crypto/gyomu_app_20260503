@@ -11,7 +11,7 @@ import {
     getAdjacentDate,
     type DailyAttendanceRecord,
 } from "@/lib/attendance-utils";
-import { formatWorkMinutes } from "@/lib/punch";
+import { formatWorkMinutes } from "@/lib/punch-utils";
 import { existsSync } from "fs";
 import path from "path";
 

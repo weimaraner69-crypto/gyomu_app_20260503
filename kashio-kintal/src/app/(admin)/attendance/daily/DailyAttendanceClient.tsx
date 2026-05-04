@@ -4,7 +4,7 @@
 import { useRouter } from "next/navigation";
 import type { DailyAttendanceRecord, StoreOption } from "@/lib/attendance-utils";
 import { getAdjacentDate } from "@/lib/attendance-utils";
-import { formatWorkMinutes } from "@/lib/punch";
+import { formatWorkMinutes } from "@/lib/punch-utils";
 
 interface Props {
     records: DailyAttendanceRecord[];
