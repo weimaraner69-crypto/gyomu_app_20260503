@@ -15,6 +15,10 @@ export default async function PunchDonePage({ searchParams }: Props) {
 
     const punchTypeLabel = type === "clock_in" ? "出勤" : "退勤";
     const punchTime = new Date(at);
+    // at が不正な値（Invalid Date）の場合はダッシュボードにリダイレクト
+    if (isNaN(punchTime.getTime())) {
+        redirect("/dashboard");
+    }
     const timeStr = punchTime.toLocaleString("ja-JP", {
         timeZone: "Asia/Tokyo",
         year: "numeric",
@@ -70,9 +74,6 @@ export default async function PunchDonePage({ searchParams }: Props) {
                 </div>
 
                 <CloseButton />
-                <p className="mt-2 text-xs text-gray-400">
-                    ※ このページを閉じてください
-                </p>
                 <p className="mt-2 text-xs text-gray-400">
                     ※ このページを閉じてください
                 </p>
