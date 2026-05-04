@@ -5,10 +5,13 @@
  */
 
 import {
+    buildDailyAttendanceRecords,
     calcNightMinutes,
     getDateUTCRange,
     getTodayJST,
     getAdjacentDate,
+    type AttendanceEmployee,
+    type AttendancePunchRecord,
     type DailyAttendanceRecord,
 } from "@/lib/attendance-utils";
 import { formatWorkMinutes } from "@/lib/punch-utils";
@@ -165,5 +168,128 @@ describe("DailyAttendanceRecord 型構造", () => {
         };
 
         expect(validStatuses).toContain(record.status);
+    });
+});
+
+describe("buildDailyAttendanceRecords", () => {
+    const dateStr = "2026-05-10";
+    const { start, end } = getDateUTCRange(dateStr);
+
+    test("前日出勤→当日退勤を当日分として集計すること", () => {
+        const employees: AttendanceEmployee[] = [
+            { employeeId: "e1", employeeName: "前日出勤" },
+        ];
+        const punches: AttendancePunchRecord[] = [
+            { employee_id: "e1", punch_type: "clock_in", punched_at: "2026-05-09T12:00:00.000Z" }, // 前日 21:00 JST
+            { employee_id: "e1", punch_type: "clock_out", punched_at: "2026-05-09T21:00:00.000Z" }, // 当日 06:00 JST
+        ];
+
+        const result = buildDailyAttendanceRecords({
+            employees,
+            punches,
+            start,
+            end,
+            dateStr,
+            todayJST: "2099-01-01",
+        });
+
+        expect(result[0].status).toBe("completed");
+        expect(result[0].workMinutes).toBe(360);
+    });
+
+    test("当日出勤→翌日退勤は当日範囲でクリップして集計すること", () => {
+        const employees: AttendanceEmployee[] = [
+            { employeeId: "e2", employeeName: "翌日退勤" },
+        ];
+        const punches: AttendancePunchRecord[] = [
+            { employee_id: "e2", punch_type: "clock_in", punched_at: "2026-05-10T12:00:00.000Z" }, // 当日 21:00 JST
+            { employee_id: "e2", punch_type: "clock_out", punched_at: "2026-05-10T21:00:00.000Z" }, // 翌日 06:00 JST
+        ];
+
+        const result = buildDailyAttendanceRecords({
+            employees,
+            punches,
+            start,
+            end,
+            dateStr,
+            todayJST: "2099-01-01",
+        });
+
+        expect(result[0].status).toBe("completed");
+        expect(result[0].workMinutes).toBe(180);
+    });
+
+    test("複数ペアを合算できること", () => {
+        const employees: AttendanceEmployee[] = [
+            { employeeId: "e3", employeeName: "複数ペア" },
+        ];
+        const punches: AttendancePunchRecord[] = [
+            { employee_id: "e3", punch_type: "clock_in", punched_at: "2026-05-10T00:00:00.000Z" }, // 09:00
+            { employee_id: "e3", punch_type: "clock_out", punched_at: "2026-05-10T02:00:00.000Z" }, // 11:00
+            { employee_id: "e3", punch_type: "clock_in", punched_at: "2026-05-10T03:00:00.000Z" }, // 12:00
+            { employee_id: "e3", punch_type: "clock_out", punched_at: "2026-05-10T05:00:00.000Z" }, // 14:00
+        ];
+
+        const result = buildDailyAttendanceRecords({
+            employees,
+            punches,
+            start,
+            end,
+            dateStr,
+            todayJST: "2099-01-01",
+        });
+
+        expect(result[0].workMinutes).toBe(240);
+        expect(result[0].status).toBe("completed");
+    });
+
+    test("過去日の未退勤は workMinutes/nightMinutes を null にすること", () => {
+        const employees: AttendanceEmployee[] = [
+            { employeeId: "e4", employeeName: "未退勤" },
+        ];
+        const punches: AttendancePunchRecord[] = [
+            { employee_id: "e4", punch_type: "clock_in", punched_at: "2026-05-10T01:00:00.000Z" },
+        ];
+
+        const result = buildDailyAttendanceRecords({
+            employees,
+            punches,
+            start,
+            end,
+            dateStr,
+            todayJST: "2099-01-01",
+        });
+
+        expect(result[0].status).toBe("working");
+        expect(result[0].workMinutes).toBeNull();
+        expect(result[0].nightMinutes).toBeNull();
+    });
+
+    test("status 順で working → no_punch → completed に並ぶこと", () => {
+        const employees: AttendanceEmployee[] = [
+            { employeeId: "w", employeeName: "working" },
+            { employeeId: "n", employeeName: "no_punch" },
+            { employeeId: "c", employeeName: "completed" },
+        ];
+        const punches: AttendancePunchRecord[] = [
+            { employee_id: "w", punch_type: "clock_in", punched_at: "2026-05-10T01:00:00.000Z" },
+            { employee_id: "c", punch_type: "clock_in", punched_at: "2026-05-10T02:00:00.000Z" },
+            { employee_id: "c", punch_type: "clock_out", punched_at: "2026-05-10T03:00:00.000Z" },
+        ];
+
+        const result = buildDailyAttendanceRecords({
+            employees,
+            punches,
+            start,
+            end,
+            dateStr,
+            todayJST: "2099-01-01",
+        });
+
+        expect(result.map((r) => r.status)).toEqual([
+            "working",
+            "no_punch",
+            "completed",
+        ]);
     });
 });
