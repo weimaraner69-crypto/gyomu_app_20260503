@@ -1,5 +1,6 @@
 // 打刻完了ページ — 打刻種別・時刻・店舗名を表示してOKで閉じる
 import { redirect } from "next/navigation";
+import { punchTypeLabel } from "@/lib/punch";
 import CloseButton from "./CloseButton";
 
 interface Props {
@@ -18,7 +19,8 @@ export default async function PunchDonePage({ searchParams }: Props) {
         redirect("/dashboard");
     }
 
-    const punchTypeLabel = type === "clock_in" ? "出勤" : "退勤";
+    // punchTypeLabel は punch.ts の関数で一元管理
+    const label = punchTypeLabel(type as "clock_in" | "clock_out");
     const punchTime = new Date(at);
     // at が不正な値（Invalid Date）の場合はダッシュボードにリダイレクト
     if (isNaN(punchTime.getTime())) {
@@ -65,7 +67,7 @@ export default async function PunchDonePage({ searchParams }: Props) {
                     <div className="flex justify-between">
                         <span className="text-sm text-gray-500">種別</span>
                         <span className="text-sm font-semibold text-gray-900">
-                            {punchTypeLabel}
+                            {label}
                         </span>
                     </div>
                     <div className="flex justify-between">

@@ -320,7 +320,8 @@ describe("B-001: 打刻完了ページ（done/page.tsx）バリデーション",
     });
 
     test("正常な type 値のみ打刻種別ラベルに変換される", () => {
-        // punchTypeLabel が clock_in の場合のみ「出勤」になること
-        expect(content).toContain('type === "clock_in" ? "出勤" : "退勤"');
+        // punch.ts の punchTypeLabel 関数を使って一元管理していること
+        expect(content).toContain('punchTypeLabel');
+        expect(content).toContain('@/lib/punch');
     });
 });
