@@ -37,6 +37,16 @@ export default async function AdminDashboardPage() {
           </>
         )}
         <Link
+          href="/admin/attendance/daily"
+          className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-5 py-4 hover:bg-gray-50 transition-colors"
+        >
+          <span className="text-2xl">📋</span>
+          <div>
+            <p className="font-semibold text-gray-900">勤怠管理（日別）</p>
+            <p className="text-xs text-gray-500">日付・店舗ごとの出退勤状況を確認</p>
+          </div>
+        </Link>
+        <Link
           href="/admin/staff"
           className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-5 py-4 hover:bg-gray-50 transition-colors"
         >
