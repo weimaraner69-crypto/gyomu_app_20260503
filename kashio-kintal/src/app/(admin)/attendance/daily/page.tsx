@@ -18,9 +18,17 @@ export default async function DailyAttendancePage({
     await requireRole(["owner", "manager", "sharoushi"]);
 
     const params = await searchParams;
-    // dateStr の形式検証：YYYY-MM-DD 以外は当日にフォールバック
+    // dateStr の形式検証：YYYY-MM-DD 以外、または実在しない日付は当日にフォールバック
+    // 例: 2026-02-31 は正規表現を通るが実在しないため Date で再検証する
     const rawDate = params.date ?? "";
-    const dateStr = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : getTodayJST();
+    let dateStr = getTodayJST();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+        const [y, m, d] = rawDate.split("-").map(Number);
+        const dt = new Date(y, m - 1, d);
+        if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
+            dateStr = rawDate;
+        }
+    }
 
     const stores = await getAllStores();
 

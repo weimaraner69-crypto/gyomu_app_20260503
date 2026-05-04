@@ -6,6 +6,7 @@ import {
     type StoreOption,
     getDateUTCRange,
     calcNightMinutes,
+    getTodayJST,
 } from "@/lib/attendance-utils";
 
 // 型・純関数を再エクスポートし、既存の import を壊さない
@@ -55,7 +56,7 @@ export async function getDailyAttendance(
 
     // 各従業員の最初の clock_in と最後の clock_out を集計。
     // clock_in は当日範囲（start 〜 end）内のもののみを「当日の出勤」として扱う。
-    // clock_out は拡張範囲内（翌日 JST 05:00 まで）を対象とする。
+    // clock_out は拡張範囲内（翌日 JST 07:00 まで）を対象とする。
     const clockInByEmployee = new Map<string, string>();
     const clockOutByEmployee = new Map<string, string>();
 
@@ -95,8 +96,12 @@ export async function getDailyAttendance(
                 status = "completed";
             } else {
                 status = "working";
-                // 勤務中は現在時刻までの深夜時間を概算
-                nightMinutes = calcNightMinutes(clockIn, null);
+                // 今日の勤務中は現在時刻まで概算。過去日は未退勤のまま終わった可能性が
+                // あるため nightMinutes は null とし、過大な値を表示しない
+                nightMinutes =
+                    dateStr === getTodayJST()
+                        ? calcNightMinutes(clockIn, null)
+                        : null;
             }
         }
 
