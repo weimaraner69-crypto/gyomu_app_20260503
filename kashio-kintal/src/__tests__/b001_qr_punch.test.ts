@@ -294,3 +294,33 @@ describe("B-001: 受入条件確認", () => {
         expect(content).toContain("requireRole");
     });
 });
+
+// --- 打刻完了ページ バリデーション回帰テスト ---
+
+describe("B-001: 打刻完了ページ（done/page.tsx）バリデーション", () => {
+    const donePath = path.join(
+        srcRoot,
+        "app/(staff)/punch/store/[storeId]/done/page.tsx"
+    );
+    let content: string;
+
+    beforeAll(() => {
+        content = fs.readFileSync(donePath, "utf-8");
+    });
+
+    test("at が Invalid Date の場合にリダイレクトするガードが存在する", () => {
+        // isNaN(punchTime.getTime()) のチェックが含まれていること
+        expect(content).toContain("isNaN(punchTime.getTime())");
+    });
+
+    test("type が許可リスト外の場合にリダイレクトするガードが存在する", () => {
+        // clock_in / clock_out 以外を弾く許可リスト検証が含まれていること
+        expect(content).toContain('type !== "clock_in"');
+        expect(content).toContain('type !== "clock_out"');
+    });
+
+    test("正常な type 値のみ打刻種別ラベルに変換される", () => {
+        // punchTypeLabel が clock_in の場合のみ「出勤」になること
+        expect(content).toContain('type === "clock_in" ? "出勤" : "退勤"');
+    });
+});

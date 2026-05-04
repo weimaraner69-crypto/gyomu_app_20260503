@@ -13,6 +13,11 @@ export default async function PunchDonePage({ searchParams }: Props) {
         redirect("/dashboard");
     }
 
+    // type が許可リスト以外の場合はリダイレクト
+    if (type !== "clock_in" && type !== "clock_out") {
+        redirect("/dashboard");
+    }
+
     const punchTypeLabel = type === "clock_in" ? "出勤" : "退勤";
     const punchTime = new Date(at);
     // at が不正な値（Invalid Date）の場合はダッシュボードにリダイレクト
