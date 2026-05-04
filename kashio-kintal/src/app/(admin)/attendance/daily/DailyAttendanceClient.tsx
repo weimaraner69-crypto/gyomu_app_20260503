@@ -12,6 +12,7 @@ interface Props {
     selectedStoreId: string;
     dateStr: string; // YYYY-MM-DD (JST)
     canEdit: boolean; // 社労士は false（閲覧のみ）
+    isManager: boolean; // manager は店舗切り替え不可（仕様: 店長は担当店舗のみ）
 }
 
 /** ISO UTC → HH:MM（JST）表示 */
@@ -59,6 +60,7 @@ export function DailyAttendanceClient({
     selectedStoreId,
     dateStr,
     canEdit,
+    isManager,
 }: Props) {
     const router = useRouter();
 
@@ -123,19 +125,21 @@ export function DailyAttendanceClient({
                     </button>
                 </div>
 
-                {/* 店舗セレクター */}
-                <select
-                    value={selectedStoreId}
-                    onChange={(e) => navigate(dateStr, e.target.value)}
-                    className="rounded border px-2 py-1 text-sm"
-                    aria-label="店舗を選択"
-                >
-                    {stores.map((s) => (
-                        <option key={s.id} value={s.id}>
-                            {s.name}
-                        </option>
-                    ))}
-                </select>
+                {/* 店舗セレクター: manager は店舗固定のため非表示（docs/kashio_phase1_scope_v1.2.md 「店長は担当店舗のみ」） */}
+                {!isManager && (
+                    <select
+                        value={selectedStoreId}
+                        onChange={(e) => navigate(dateStr, e.target.value)}
+                        className="rounded border px-2 py-1 text-sm"
+                        aria-label="店舗を選択"
+                    >
+                        {stores.map((s) => (
+                            <option key={s.id} value={s.id}>
+                                {s.name}
+                            </option>
+                        ))}
+                    </select>
+                )}
 
                 <span className="ml-auto text-sm text-gray-500">
                     {selectedStore?.name} / {records.length} 名

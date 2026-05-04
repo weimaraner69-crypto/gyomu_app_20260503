@@ -74,6 +74,8 @@ export default async function DailyAttendancePage({
     }
 
     const records = await getDailyAttendance(storeId, dateStr);
+    // manager は仕様上、担当店舗が1店舗固定（docs/kashio_phase1_scope_v1.2.md「店長は担当店舗のみ」）
+    const isManager = user.role === "manager";
 
     return (
         <DailyAttendanceClient
@@ -82,6 +84,7 @@ export default async function DailyAttendancePage({
             selectedStoreId={storeId}
             dateStr={dateStr}
             canEdit={canEdit}
+            isManager={isManager}
         />
     );
 }

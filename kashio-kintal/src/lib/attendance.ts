@@ -9,6 +9,7 @@ import {
     type DailyAttendanceRecord,
     type StoreOption,
     getDateUTCRange,
+    getTodayJST,
 } from "@/lib/attendance-utils";
 
 /**
@@ -23,11 +24,13 @@ export async function getDailyAttendance(
     const supabase = await createClient();
     const { start, end } = getDateUTCRange(dateStr);
 
-    // 店舗に所属する従業員を取得
+    // 参照日（dateStr）に所属していた従業員のみ取得（退職済み・将来所属は除外）
     const { data: empStores, error: empError } = await supabase
         .from("employee_stores")
         .select("employee_id, employees(id, name_kanji, name_kana)")
-        .eq("store_id", storeId);
+        .eq("store_id", storeId)
+        .lte("valid_from", dateStr)
+        .or(`valid_to.is.null,valid_to.gte.${dateStr}`);
 
     if (empError) {
         throw new Error(`従業員取得エラー: ${empError.message}`);
@@ -104,7 +107,7 @@ export async function getAllStores(): Promise<StoreOption[]> {
  */
 export async function getManagerStores(employeeId: string): Promise<StoreOption[]> {
     const supabase = await createClient();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayJST();
     const { data, error } = await supabase
         .from("employee_stores")
         .select("store_id, stores(id, name)")

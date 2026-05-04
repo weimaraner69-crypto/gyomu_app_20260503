@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 export type { PunchType, EmployeeWithTodayStatus } from "@/lib/punch-utils";
 export { punchTypeLabel, formatWorkMinutes } from "@/lib/punch-utils";
 import type { PunchType, EmployeeWithTodayStatus } from "@/lib/punch-utils";
+import { getTodayJST } from "@/lib/attendance-utils";
 
 export interface PunchRecord {
     id: string;
@@ -136,14 +137,18 @@ export async function getStoreEmployeesWithTodayStatus(
     const supabase = await createClient();
     const { start, end } = getTodayUTCRange();
 
-    // 店舗に所属する有効な従業員を取得（valid_to IS NULL = 現在在籍のみ、退職済み・将来所属は除外）
-    const today = new Date().toISOString().slice(0, 10);
-    const { data: empStores } = await supabase
+    // 店舗に所属する有効な従業員を取得（JST 当日基準で退職済み・将来所属は除外）
+    const today = getTodayJST();
+    const { data: empStores, error: empError } = await supabase
         .from("employee_stores")
         .select("employee_id, employees(id, name_kanji, name_kana)")
         .eq("store_id", storeId)
         .lte("valid_from", today)
         .or(`valid_to.is.null,valid_to.gte.${today}`);
+
+    if (empError) {
+        throw new Error(`従業員取得エラー: ${empError.message}`);
+    }
 
     if (!empStores || empStores.length === 0) return [];
 
