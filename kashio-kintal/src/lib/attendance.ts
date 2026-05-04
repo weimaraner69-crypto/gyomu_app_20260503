@@ -24,10 +24,14 @@ export async function getDailyAttendance(
     const { start, end } = getDateUTCRange(dateStr);
 
     // 店舗に所属する従業員を取得
-    const { data: empStores } = await supabase
+    const { data: empStores, error: empError } = await supabase
         .from("employee_stores")
         .select("employee_id, employees(id, name_kanji, name_kana)")
         .eq("store_id", storeId);
+
+    if (empError) {
+        throw new Error(`従業員取得エラー: ${empError.message}`);
+    }
 
     if (!empStores || empStores.length === 0) return [];
 
@@ -39,7 +43,7 @@ export async function getDailyAttendance(
         new Date(end).getTime() + 7 * 60 * 60 * 1000
     ).toISOString();
 
-    const { data: punches } = await supabase
+    const { data: punches, error: punchError } = await supabase
         .from("punch_records")
         .select("employee_id, punch_type, punched_at")
         .eq("store_id", storeId)
@@ -48,31 +52,44 @@ export async function getDailyAttendance(
         .lt("punched_at", extendedEnd)
         .order("punched_at", { ascending: true });
 
-    // 各従業員の最初の clock_in と最後の clock_out を集計。
-    // clock_in は当日範囲（start 〜 end）内のもののみを「当日の出勤」として扱う。
-    // clock_out は拡張範囲内（翌日 JST 07:00 まで）を対象とする。
-    const clockInByEmployee = new Map<string, string>();
-    const clockOutByEmployee = new Map<string, string>();
+    if (punchError) {
+        throw new Error(`打刻取得エラー: ${punchError.message}`);
+    }
+
+    // 従業員ごとにペアリングされた clock_in/clock_out を集計。
+    // 当日（start ～ end）内のすべての clock_in を抽出し、各々の clock_out をペアリング。
+    interface PunchPair {
+        clockIn: string;
+        clockOut: string | null;
+    }
+    const punchPairsByEmployee = new Map<string, PunchPair[]>();
 
     const startMs = new Date(start).getTime();
     const endMs = new Date(end).getTime();
 
+    // 当日範囲内の clock_in をすべて抽出
     for (const p of punches ?? []) {
         const pMs = new Date(p.punched_at).getTime();
-        if (
-            p.punch_type === "clock_in" &&
-            pMs >= startMs &&
-            pMs < endMs &&
-            !clockInByEmployee.has(p.employee_id)
-        ) {
-            clockInByEmployee.set(p.employee_id, p.punched_at);
+        if (p.punch_type === "clock_in" && pMs >= startMs && pMs < endMs) {
+            const pairs = punchPairsByEmployee.get(p.employee_id) ?? [];
+            pairs.push({ clockIn: p.punched_at, clockOut: null });
+            punchPairsByEmployee.set(p.employee_id, pairs);
         }
-        if (
-            p.punch_type === "clock_out" &&
-            clockInByEmployee.has(p.employee_id)
-        ) {
-            // 当日の出勤に対応する最後の clock_out を保持（上書き）
-            clockOutByEmployee.set(p.employee_id, p.punched_at);
+    }
+
+    // 各 clock_in に対応する clock_out をペアリング（降順の場合は最初の clock_out）
+    for (const p of punches ?? []) {
+        if (p.punch_type === "clock_out") {
+            const pairs = punchPairsByEmployee.get(p.employee_id);
+            if (pairs && pairs.length > 0) {
+                // 未ペアの clock_in を探す
+                for (const pair of pairs) {
+                    if (pair.clockOut === null) {
+                        pair.clockOut = p.punched_at;
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -84,37 +101,58 @@ export async function getDailyAttendance(
             name_kanji: string | null;
             name_kana: string | null;
         } | null;
-        const clockIn = clockInByEmployee.get(es.employee_id) ?? null;
-        const clockOut = clockOutByEmployee.get(es.employee_id) ?? null;
+        const pairs = punchPairsByEmployee.get(es.employee_id) ?? [];
 
         let workMinutes: number | null = null;
         let nightMinutes: number | null = null;
         let status: DailyAttendanceRecord["status"] = "no_punch";
 
-        if (clockIn) {
-            if (clockOut) {
-                const diffMs =
-                    new Date(clockOut).getTime() - new Date(clockIn).getTime();
-                workMinutes = Math.max(0, Math.floor(diffMs / 60000));
-                nightMinutes = calcNightMinutes(clockIn, clockOut);
-                status = "completed";
-            } else {
-                status = "working";
-                // 今日の勤務中は現在時刻まで概算。過去日は未退勤のまま終わった可能性が
-                // あるため work/night とも null のままにして過大表示を避ける
-                if (dateStr === todayJST) {
-                    const diffMs = Date.now() - new Date(clockIn).getTime();
-                    workMinutes = Math.max(0, Math.floor(diffMs / 60000));
-                    nightMinutes = calcNightMinutes(clockIn, null);
+        if (pairs.length > 0) {
+            // 最初のペアの clock_in が「当日出勤」判定
+            const firstIn = pairs[0]?.clockIn;
+            const hasUnpaired = pairs.some((p) => p.clockOut === null);
+
+            if (firstIn) {
+                if (hasUnpaired) {
+                    status = "working";
+                } else {
+                    status = "completed";
                 }
+
+                // すべてのペアの時間と深夜分を合算
+                let totalWorkMs = 0;
+                let totalNightMinutes = 0;
+                for (const pair of pairs) {
+                    if (pair.clockOut) {
+                        const diffMs =
+                            new Date(pair.clockOut).getTime() -
+                            new Date(pair.clockIn).getTime();
+                        totalWorkMs += diffMs;
+                        totalNightMinutes += calcNightMinutes(
+                            pair.clockIn,
+                            pair.clockOut
+                        );
+                    } else if (dateStr === todayJST) {
+                        // 当日未退勤の場合のみ現在時刻まで概算
+                        const diffMs =
+                            Date.now() - new Date(pair.clockIn).getTime();
+                        totalWorkMs += diffMs;
+                        totalNightMinutes += calcNightMinutes(
+                            pair.clockIn,
+                            null
+                        );
+                    }
+                }
+                workMinutes = Math.max(0, Math.floor(totalWorkMs / 60000));
+                nightMinutes = totalNightMinutes;
             }
         }
 
         return {
             employeeId: es.employee_id,
             employeeName: emp?.name_kanji ?? emp?.name_kana ?? "不明",
-            clockIn,
-            clockOut,
+            clockIn: pairs[0]?.clockIn ?? null,
+            clockOut: pairs[pairs.length - 1]?.clockOut ?? null,
             workMinutes,
             nightMinutes,
             status,
@@ -133,9 +171,14 @@ export async function getDailyAttendance(
 /** 全店舗一覧を取得する */
 export async function getAllStores(): Promise<StoreOption[]> {
     const supabase = await createClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from("stores")
         .select("id, name")
         .order("name");
+
+    if (error) {
+        throw new Error(`店舗取得エラー: ${error.message}`);
+    }
+
     return data ?? [];
 }

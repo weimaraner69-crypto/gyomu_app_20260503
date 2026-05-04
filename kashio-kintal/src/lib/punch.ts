@@ -1,9 +1,9 @@
 // 打刻ユーティリティ — punch_records への挿入・直近打刻取得（サーバー専用）
 // 純関数・型は @/lib/punch-utils からも import できます（クライアント側はそちらを使用）。
 import { createClient } from "@/lib/supabase/server";
-export type { PunchType } from "@/lib/punch-utils";
+export type { PunchType, EmployeeWithTodayStatus } from "@/lib/punch-utils";
 export { punchTypeLabel, formatWorkMinutes } from "@/lib/punch-utils";
-import type { PunchType } from "@/lib/punch-utils";
+import type { PunchType, EmployeeWithTodayStatus } from "@/lib/punch-utils";
 
 export interface PunchRecord {
     id: string;
@@ -127,13 +127,6 @@ export function getTodayUTCRange(): { start: string; end: string } {
     return { start, end };
 }
 
-export interface EmployeeWithTodayStatus {
-    id: string;
-    name: string;
-    latestTodayPunchType: PunchType | null;
-    latestTodayPunchedAt: string | null;
-}
-
 /**
  * 特定店舗の全スタッフと当日打刻状況を取得する。
  * 未退勤（clock_in のみ）→ 先頭、打刻なし → 中間、退勤済み → 末尾 の順で返す。
@@ -211,13 +204,6 @@ export function getTodayUTCRange(): { start: string; end: string } {
     const start = new Date(Date.UTC(year, month, day) - jstOffsetMs).toISOString();
     const end = new Date(Date.UTC(year, month, day + 1) - jstOffsetMs).toISOString();
     return { start, end };
-}
-
-export interface EmployeeWithTodayStatus {
-    id: string;
-    name: string;
-    latestTodayPunchType: PunchType | null;
-    latestTodayPunchedAt: string | null;
 }
 
 /**

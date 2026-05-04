@@ -2,14 +2,10 @@
 // iPad 打刻クライアントコンポーネント
 import { useState, useEffect, useCallback, useTransition } from "react";
 import { executeIpadPunch, IpadPunchResult } from "./actions";
-import { punchTypeLabel, type PunchType } from "@/lib/punch-utils";
-
-interface EmployeeWithTodayStatus {
-    id: string;
-    name: string;
-    latestTodayPunchType: PunchType | null;
-    latestTodayPunchedAt: string | null;
-}
+import {
+    punchTypeLabel,
+    type EmployeeWithTodayStatus,
+} from "@/lib/punch-utils";
 
 interface StoreInfo {
     id: string;

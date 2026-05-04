@@ -4,6 +4,13 @@
 
 export type PunchType = "clock_in" | "clock_out";
 
+export interface EmployeeWithTodayStatus {
+    id: string;
+    name: string;
+    latestTodayPunchType: PunchType | null;
+    latestTodayPunchedAt: string | null;
+}
+
 /** 打刻種別の日本語ラベル */
 export function punchTypeLabel(type: PunchType): string {
     return type === "clock_in" ? "出勤" : "退勤";
