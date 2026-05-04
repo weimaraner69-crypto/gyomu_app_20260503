@@ -2,8 +2,8 @@
 
 // 勤怠管理（日別ビュー）— クライアントコンポーネント
 import { useRouter } from "next/navigation";
-import type { DailyAttendanceRecord, StoreOption } from "@/lib/attendance";
-import { getAdjacentDate } from "@/lib/attendance";
+import type { DailyAttendanceRecord, StoreOption } from "@/lib/attendance-utils";
+import { getAdjacentDate } from "@/lib/attendance-utils";
 import { formatWorkMinutes } from "@/lib/punch";
 
 interface Props {
