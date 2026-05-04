@@ -139,7 +139,7 @@ export async function getStoreEmployeesWithTodayStatus(
     // 店舗に所属する従業員を取得
     const { data: empStores } = await supabase
         .from("employee_stores")
-        .select("employee_id, employees(id, name)")
+        .select("employee_id, employees(id, name_kanji, name_kana)")
         .eq("store_id", storeId);
 
     if (!empStores || empStores.length === 0) return [];
@@ -168,11 +168,15 @@ export async function getStoreEmployeesWithTodayStatus(
     }
 
     const employees: EmployeeWithTodayStatus[] = empStores.map((es) => {
-        const emp = es.employees as { id: string; name: string } | null;
+        const emp = es.employees as {
+            id: string;
+            name_kanji: string | null;
+            name_kana: string | null;
+        } | null;
         const latest = latestByEmployee.get(es.employee_id) ?? null;
         return {
             id: es.employee_id,
-            name: emp?.name ?? "不明",
+            name: emp?.name_kanji ?? emp?.name_kana ?? "不明",
             latestTodayPunchType: (latest?.punch_type ?? null) as PunchType | null,
             latestTodayPunchedAt: latest?.punched_at ?? null,
         };

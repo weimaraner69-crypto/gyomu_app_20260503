@@ -160,8 +160,16 @@ export async function getDailyAttendance(
                         );
                     }
                 }
-                workMinutes = Math.max(0, Math.floor(totalWorkMs / 60000));
-                nightMinutes = totalNightMinutes;
+
+                // 過去日の未退勤は workMinutes/nightMinutes を null にする
+                // （0分扱いになって誤解を招くのを避ける）
+                if (hasUnpaired && dateStr !== todayJST) {
+                    workMinutes = null;
+                    nightMinutes = null;
+                } else {
+                    workMinutes = Math.max(0, Math.floor(totalWorkMs / 60000));
+                    nightMinutes = totalNightMinutes;
+                }
             }
         }
 
