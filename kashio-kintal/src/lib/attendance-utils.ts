@@ -18,21 +18,32 @@ export interface StoreOption {
 }
 
 /**
- * JST の日付文字列（YYYY-MM-DD）から当日の UTC 範囲を返す。
- * JST 0:00〜翌 0:00 を UTC に変換する。
+ * JST の日付文字列（YYYY-MM-DD）から営業日の UTC 範囲を返す。
+ * 営業日区切りは JST 05:00〜翌 05:00（docs/kashio_phase1_scope_v1.2.md 準拠）。
+ * JST 05:00 = UTC 前日 20:00 に相当する。
  */
 export function getDateUTCRange(dateStr: string): { start: string; end: string } {
-    const jstOffsetMs = 9 * 60 * 60 * 1000;
+    // JST オフセット 9h から営業日オフセット 5h を差し引いた 4h をUTC基準で加算する
+    const businessDayOffsetMs = 4 * 60 * 60 * 1000; // JST 05:00 = UTC 前日+20h = UTC 当日-4h
     const [year, month, day] = dateStr.split("-").map(Number);
-    const start = new Date(Date.UTC(year, month - 1, day) - jstOffsetMs).toISOString();
-    const end = new Date(Date.UTC(year, month - 1, day + 1) - jstOffsetMs).toISOString();
+    const start = new Date(Date.UTC(year, month - 1, day) - businessDayOffsetMs).toISOString();
+    const end = new Date(Date.UTC(year, month - 1, day + 1) - businessDayOffsetMs).toISOString();
     return { start, end };
 }
 
-/** 今日の JST 日付を YYYY-MM-DD 形式で返す */
+/**
+ * 営業日基準の「今日」の JST 日付を YYYY-MM-DD 形式で返す。
+ * JST 00:00〜04:59 は前日の営業日扱い（docs/kashio_phase1_scope_v1.2.md 準拠）。
+ */
 export function getTodayJST(): string {
     const jstOffsetMs = 9 * 60 * 60 * 1000;
+    const businessDayStartHour = 5; // 営業日開始: JST 05:00
     const now = new Date(Date.now() + jstOffsetMs);
+    const jstHour = now.getUTCHours();
+    // JST 05:00 未満（00:00〜04:59）は前の営業日
+    if (jstHour < businessDayStartHour) {
+        now.setUTCDate(now.getUTCDate() - 1);
+    }
     const y = now.getUTCFullYear();
     const m = String(now.getUTCMonth() + 1).padStart(2, "0");
     const d = String(now.getUTCDate()).padStart(2, "0");

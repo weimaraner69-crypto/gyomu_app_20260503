@@ -11,6 +11,7 @@ interface Props {
     stores: StoreOption[];
     selectedStoreId: string;
     dateStr: string; // YYYY-MM-DD (JST)
+    canEdit: boolean; // 社労士は false（閉覧のみ）
 }
 
 /** ISO UTC → HH:MM（JST）表示 */
@@ -57,6 +58,7 @@ export function DailyAttendanceClient({
     stores,
     selectedStoreId,
     dateStr,
+    canEdit,
 }: Props) {
     const router = useRouter();
 
@@ -163,16 +165,18 @@ export function DailyAttendanceClient({
                             <th className="px-4 py-2 text-center font-medium text-gray-600">
                                 深夜時間
                             </th>
-                            <th className="px-4 py-2 text-center font-medium text-gray-600">
-                                操作
-                            </th>
+                            {canEdit && (
+                                <th className="px-4 py-2 text-center font-medium text-gray-600">
+                                    操作
+                                </th>
+                            )}
                         </tr>
                     </thead>
                     <tbody className="divide-y">
                         {records.length === 0 ? (
                             <tr>
                                 <td
-                                    colSpan={7}
+                                    colSpan={canEdit ? 7 : 6}
                                     className="px-4 py-8 text-center text-gray-400"
                                 >
                                     スタッフが登録されていません
@@ -211,12 +215,14 @@ export function DailyAttendanceClient({
                                             ? formatWorkMinutes(r.nightMinutes)
                                             : "—"}
                                     </td>
-                                    <td className="px-4 py-3 text-center">
-                                        {/* B-005 実装後に修正リンクを追加 */}
-                                        <span className="text-xs text-gray-400">
-                                            修正（準備中）
-                                        </span>
-                                    </td>
+                                    {canEdit && (
+                                        <td className="px-4 py-3 text-center">
+                                            {/* B-005 実装後に修正リンクを追加 */}
+                                            <span className="text-xs text-gray-400">
+                                                修正（準備中）
+                                            </span>
+                                        </td>
+                                    )}
                                 </tr>
                             ))
                         )}

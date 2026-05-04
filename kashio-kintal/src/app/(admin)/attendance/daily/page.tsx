@@ -12,7 +12,9 @@ interface PageProps {
 export default async function DailyAttendancePage({
     searchParams,
 }: PageProps) {
-    await requireRole(["owner", "manager", "sharoushi"]);
+    const user = await requireRole(["owner", "manager", "sharoushi"]);
+    // 社労士は閲覧のみ（docs/kashio_phase1_scope_v1.2.md 準拠）
+    const canEdit = user.role !== "sharoushi";
 
     const params = await searchParams;
     // dateStr の形式検証：YYYY-MM-DD 以外、または実在しない日付は当日にフォールバック
@@ -75,6 +77,7 @@ export default async function DailyAttendancePage({
             stores={stores}
             selectedStoreId={storeId}
             dateStr={dateStr}
+            canEdit={canEdit}
         />
     );
 }

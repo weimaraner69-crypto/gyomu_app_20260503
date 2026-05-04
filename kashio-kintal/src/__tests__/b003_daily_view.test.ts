@@ -74,14 +74,14 @@ describe("getAdjacentDate", () => {
 // ─── getDateUTCRange ──────────────────────────────────────────────────────────
 
 describe("getDateUTCRange", () => {
-    test("JST 2026-05-10 の UTC start は 2026-05-09T15:00:00.000Z", () => {
+    test("JST 2026-05-10 の UTC start は 営業日 05:00 基準で 2026-05-09T20:00:00.000Z", () => {
         const { start } = getDateUTCRange("2026-05-10");
-        expect(start).toBe("2026-05-09T15:00:00.000Z");
+        expect(start).toBe("2026-05-09T20:00:00.000Z");
     });
 
-    test("JST 2026-05-10 の UTC end は 2026-05-10T15:00:00.000Z", () => {
+    test("JST 2026-05-10 の UTC end は 営業日 05:00 基準で 2026-05-10T20:00:00.000Z", () => {
         const { end } = getDateUTCRange("2026-05-10");
-        expect(end).toBe("2026-05-10T15:00:00.000Z");
+        expect(end).toBe("2026-05-10T20:00:00.000Z");
     });
 
     test("start < end であること", () => {
@@ -180,8 +180,10 @@ describe("buildDailyAttendanceRecords", () => {
             { employeeId: "e1", employeeName: "前日出勤" },
         ];
         const punches: AttendancePunchRecord[] = [
-            { employee_id: "e1", punch_type: "clock_in", punched_at: "2026-05-09T12:00:00.000Z" }, // 前日 21:00 JST
-            { employee_id: "e1", punch_type: "clock_out", punched_at: "2026-05-09T21:00:00.000Z" }, // 当日 06:00 JST
+            // 出勤: JST 05-09 23:00 (new start=05-09T20:00Z より前)
+            { employee_id: "e1", punch_type: "clock_in", punched_at: "2026-05-09T14:00:00.000Z" },
+            // 退勤: JST 05-10 11:00 (new startから 6h 後 = 360分)
+            { employee_id: "e1", punch_type: "clock_out", punched_at: "2026-05-10T02:00:00.000Z" },
         ];
 
         const result = buildDailyAttendanceRecords({
@@ -202,8 +204,10 @@ describe("buildDailyAttendanceRecords", () => {
             { employeeId: "e2", employeeName: "翌日退勤" },
         ];
         const punches: AttendancePunchRecord[] = [
-            { employee_id: "e2", punch_type: "clock_in", punched_at: "2026-05-10T12:00:00.000Z" }, // 当日 21:00 JST
-            { employee_id: "e2", punch_type: "clock_out", punched_at: "2026-05-10T21:00:00.000Z" }, // 翌日 06:00 JST
+            // 出勤: JST 05-11 02:00 (当日営業日範囲内)
+            { employee_id: "e2", punch_type: "clock_in", punched_at: "2026-05-10T17:00:00.000Z" },
+            // 退勤: JST 05-11 09:00 (当日営業日範囲外) → end で clampして 3h = 180分
+            { employee_id: "e2", punch_type: "clock_out", punched_at: "2026-05-11T00:00:00.000Z" },
         ];
 
         const result = buildDailyAttendanceRecords({
