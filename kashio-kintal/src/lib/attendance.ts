@@ -26,7 +26,7 @@ export async function getDailyAttendance(
     // 店舗に所属する従業員を取得
     const { data: empStores } = await supabase
         .from("employee_stores")
-        .select("employee_id, employees(id, name)")
+        .select("employee_id, employees(id, name_kanji, name_kana)")
         .eq("store_id", storeId);
 
     if (!empStores || empStores.length === 0) return [];
@@ -72,8 +72,14 @@ export async function getDailyAttendance(
         }
     }
 
+    const todayJST = getTodayJST();
+
     const records: DailyAttendanceRecord[] = empStores.map((es) => {
-        const emp = es.employees as { id: string; name: string } | null;
+        const emp = es.employees as {
+            id: string;
+            name_kanji: string | null;
+            name_kana: string | null;
+        } | null;
         const clockIn = clockInByEmployee.get(es.employee_id) ?? null;
         const clockOut = clockOutByEmployee.get(es.employee_id) ?? null;
 
@@ -91,17 +97,18 @@ export async function getDailyAttendance(
             } else {
                 status = "working";
                 // 今日の勤務中は現在時刻まで概算。過去日は未退勤のまま終わった可能性が
-                // あるため nightMinutes は null とし、過大な値を表示しない
-                nightMinutes =
-                    dateStr === getTodayJST()
-                        ? calcNightMinutes(clockIn, null)
-                        : null;
+                // あるため work/night とも null のままにして過大表示を避ける
+                if (dateStr === todayJST) {
+                    const diffMs = Date.now() - new Date(clockIn).getTime();
+                    workMinutes = Math.max(0, Math.floor(diffMs / 60000));
+                    nightMinutes = calcNightMinutes(clockIn, null);
+                }
             }
         }
 
         return {
             employeeId: es.employee_id,
-            employeeName: emp?.name ?? "不明",
+            employeeName: emp?.name_kanji ?? "不明",
             clockIn,
             clockOut,
             workMinutes,
