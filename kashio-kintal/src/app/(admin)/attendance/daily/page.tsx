@@ -1,10 +1,7 @@
 // 勤怠管理（日別ビュー）— サーバーコンポーネント
 import { requireRole } from "@/lib/auth";
-import {
-    getDailyAttendance,
-    getTodayJST,
-    getAllStores,
-} from "@/lib/attendance";
+import { getDailyAttendance, getAllStores } from "@/lib/attendance";
+import { getTodayJST } from "@/lib/attendance-utils";
 import { DailyAttendanceClient } from "./DailyAttendanceClient";
 import { redirect } from "next/navigation";
 

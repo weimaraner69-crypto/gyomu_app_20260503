@@ -1,5 +1,7 @@
 // 勤怠管理ユーティリティ — DB アクセス（サーバー専用）
-// 純関数・型は attendance-utils.ts に分離済み
+// 型・純関数は @/lib/attendance-utils から直接 import してください。
+// このファイルは supabase/server 依存を持つため、クライアントコンポーネントからの
+// import はビルドエラーになります。再エクスポートは廃止済み。
 import { createClient } from "@/lib/supabase/server";
 import {
     type DailyAttendanceRecord,
@@ -8,14 +10,6 @@ import {
     calcNightMinutes,
     getTodayJST,
 } from "@/lib/attendance-utils";
-
-// 型・純関数を再エクスポートし、既存の import を壊さない
-export type { DailyAttendanceRecord, StoreOption };
-export {
-    getDateUTCRange,
-    calcNightMinutes,
-} from "@/lib/attendance-utils";
-export { getTodayJST, getAdjacentDate } from "@/lib/attendance-utils";
 
 /**
  * 特定日・特定店舗の全スタッフ勤怠を取得する。
