@@ -95,3 +95,31 @@ export async function getAllStores(): Promise<StoreOption[]> {
 
     return data ?? [];
 }
+
+/**
+ * manager ロールのユーザーが担当する店舗一覧を取得する。
+ * employee_stores の有効レコード（valid_to IS NULL）から store_id を取得し、
+ * stores テーブルと結合して返す。
+ * 担当店舗なしの場合は空配列を返す。
+ */
+export async function getManagerStores(employeeId: string): Promise<StoreOption[]> {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+        .from("employee_stores")
+        .select("store_id, stores(id, name)")
+        .eq("employee_id", employeeId)
+        .is("valid_to", null);
+
+    if (error) {
+        throw new Error(`担当店舗取得エラー: ${error.message}`);
+    }
+
+    if (!data || data.length === 0) return [];
+
+    return data
+        .map((row) => {
+            const store = row.stores as { id: string; name: string } | null;
+            return store ? { id: store.id, name: store.name } : null;
+        })
+        .filter((s): s is StoreOption => s !== null);
+}

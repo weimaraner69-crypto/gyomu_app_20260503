@@ -141,6 +141,11 @@ interface PunchPair {
 
 /**
  * 日別ビュー用に、打刻一覧から従業員ごとの勤怠レコードを組み立てる純関数。
+ *
+ * 【05:00 またぎの扱い（docs/kashio_phase1_scope_v1.2.md 準拠）】
+ * - clock_in は営業日範囲 [start, end) 内のものだけを対象にする（lookback なし）
+ * - clock_out が end を超えるペアは 05:00 またぎエラーとして未退勤（working）扱いとする
+ * - このためペアリングは clockOut <= end の場合のみ成立とする
  */
 export function buildDailyAttendanceRecords(params: {
     employees: AttendanceEmployee[];
@@ -150,7 +155,6 @@ export function buildDailyAttendanceRecords(params: {
     dateStr: string;
     todayJST?: string;
     nowMs?: number;
-    lookbackHours?: number;
 }): DailyAttendanceRecord[] {
     const {
         employees,
@@ -160,31 +164,31 @@ export function buildDailyAttendanceRecords(params: {
         dateStr,
         todayJST = getTodayJST(),
         nowMs = Date.now(),
-        lookbackHours = 24,
     } = params;
 
     const startMs = new Date(start).getTime();
     const endMs = new Date(end).getTime();
-    const lookbackMs = lookbackHours * 60 * 60 * 1000;
 
     const punchPairsByEmployee = new Map<string, PunchPair[]>();
 
-    // 前日以前から当日へ跨る勤務を拾うため、一定時間の lookback を許容する
+    // clock_in は [start, end) 内のもののみ収集（05:00 またぎ防止のため lookback なし）
     for (const p of punches) {
         const pMs = new Date(p.punched_at).getTime();
-        if (p.punch_type === "clock_in" && pMs >= startMs - lookbackMs && pMs < endMs) {
+        if (p.punch_type === "clock_in" && pMs >= startMs && pMs < endMs) {
             const pairs = punchPairsByEmployee.get(p.employee_id) ?? [];
             pairs.push({ clockIn: p.punched_at, clockOut: null });
             punchPairsByEmployee.set(p.employee_id, pairs);
         }
     }
 
+    // clock_out は end 以内のもののみペアに対応（end を超えた場合は 05:00 またぎエラー）
     for (const p of punches) {
         if (p.punch_type !== "clock_out") continue;
         const pairs = punchPairsByEmployee.get(p.employee_id);
         if (!pairs || pairs.length === 0) continue;
 
         const pOutMs = new Date(p.punched_at).getTime();
+        if (pOutMs > endMs) continue; // 05:00 またぎ：このペアは open のまま（working 扱い）
         for (const pair of pairs) {
             if (pair.clockOut !== null) continue;
             const pInMs = new Date(pair.clockIn).getTime();
@@ -196,12 +200,7 @@ export function buildDailyAttendanceRecords(params: {
     }
 
     const records = employees.map((employee) => {
-        const allPairs = punchPairsByEmployee.get(employee.employeeId) ?? [];
-        const pairs = allPairs.filter((p) => {
-            const pInMs = new Date(p.clockIn).getTime();
-            const pOutMs = p.clockOut ? new Date(p.clockOut).getTime() : null;
-            return pInMs < endMs && (pOutMs === null || pOutMs >= startMs);
-        });
+        const pairs = punchPairsByEmployee.get(employee.employeeId) ?? [];
 
         let workMinutes: number | null = null;
         let nightMinutes: number | null = null;
@@ -218,22 +217,14 @@ export function buildDailyAttendanceRecords(params: {
                 const pInMs = new Date(pair.clockIn).getTime();
                 if (pair.clockOut) {
                     const pOutMs = new Date(pair.clockOut).getTime();
-                    const overlapStartMs = Math.max(pInMs, startMs);
-                    const overlapEndMs = Math.min(pOutMs, endMs);
-                    if (overlapEndMs > overlapStartMs) {
-                        totalWorkMs += overlapEndMs - overlapStartMs;
-                        totalNightMinutes += calcNightMinutes(
-                            new Date(overlapStartMs).toISOString(),
-                            new Date(overlapEndMs).toISOString()
-                        );
-                    }
+                    totalWorkMs += pOutMs - pInMs;
+                    totalNightMinutes += calcNightMinutes(pair.clockIn, pair.clockOut);
                 } else if (dateStr === todayJST) {
-                    const overlapStartMs = Math.max(pInMs, startMs);
                     const overlapEndMs = Math.min(nowMs, endMs);
-                    if (overlapEndMs > overlapStartMs) {
-                        totalWorkMs += overlapEndMs - overlapStartMs;
+                    if (overlapEndMs > pInMs) {
+                        totalWorkMs += overlapEndMs - pInMs;
                         totalNightMinutes += calcNightMinutes(
-                            new Date(overlapStartMs).toISOString(),
+                            pair.clockIn,
                             new Date(overlapEndMs).toISOString()
                         );
                     }

@@ -175,14 +175,14 @@ describe("buildDailyAttendanceRecords", () => {
     const dateStr = "2026-05-10";
     const { start, end } = getDateUTCRange(dateStr);
 
-    test("前日出勤→当日退勤を当日分として集計すること", () => {
+    test("前日出勤→当日退勤（05:00 またぎ）は no_punch（lookback なし•護業日基準エラー）となること", () => {
         const employees: AttendanceEmployee[] = [
             { employeeId: "e1", employeeName: "前日出勤" },
         ];
         const punches: AttendancePunchRecord[] = [
-            // 出勤: JST 05-09 23:00 (new start=05-09T20:00Z より前)
+            // 出勤: start(05-09T20:00Z) より前 → 集計対象外
             { employee_id: "e1", punch_type: "clock_in", punched_at: "2026-05-09T14:00:00.000Z" },
-            // 退勤: JST 05-10 11:00 (new startから 6h 後 = 360分)
+            // 退勤: 当日の 11:00 JST → ペア側の clock_in がないためペア不成立
             { employee_id: "e1", punch_type: "clock_out", punched_at: "2026-05-10T02:00:00.000Z" },
         ];
 
@@ -195,18 +195,18 @@ describe("buildDailyAttendanceRecords", () => {
             todayJST: "2099-01-01",
         });
 
-        expect(result[0].status).toBe("completed");
-        expect(result[0].workMinutes).toBe(360);
+        expect(result[0].status).toBe("no_punch");
+        expect(result[0].workMinutes).toBeNull();
     });
 
-    test("当日出勤→翌日退勤は当日範囲でクリップして集計すること", () => {
+    test("当日出勤→翌日退勤（05:00 またぎ）は working（未退勤エラー）になること", () => {
         const employees: AttendanceEmployee[] = [
             { employeeId: "e2", employeeName: "翌日退勤" },
         ];
         const punches: AttendancePunchRecord[] = [
             // 出勤: JST 05-11 02:00 (当日営業日範囲内)
             { employee_id: "e2", punch_type: "clock_in", punched_at: "2026-05-10T17:00:00.000Z" },
-            // 退勤: JST 05-11 09:00 (当日営業日範囲外) → end で clampして 3h = 180分
+            // 退勤: JST 05-11 09:00 (end=10T20:00Z を超過) → 05:00 またぎエラー
             { employee_id: "e2", punch_type: "clock_out", punched_at: "2026-05-11T00:00:00.000Z" },
         ];
 
@@ -219,8 +219,10 @@ describe("buildDailyAttendanceRecords", () => {
             todayJST: "2099-01-01",
         });
 
-        expect(result[0].status).toBe("completed");
-        expect(result[0].workMinutes).toBe(180);
+        // 05:00 またぎは未退勤エラー扱い（手動修正対象）
+        expect(result[0].status).toBe("working");
+        expect(result[0].workMinutes).toBeNull();
+        expect(result[0].nightMinutes).toBeNull();
     });
 
     test("複数ペアを合算できること", () => {

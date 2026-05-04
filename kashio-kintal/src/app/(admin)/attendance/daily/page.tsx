@@ -1,6 +1,6 @@
 // 勤怠管理（日別ビュー）— サーバーコンポーネント
 import { requireRole } from "@/lib/auth";
-import { getDailyAttendance, getAllStores } from "@/lib/attendance";
+import { getDailyAttendance, getAllStores, getManagerStores } from "@/lib/attendance";
 import { getTodayJST } from "@/lib/attendance-utils";
 import { DailyAttendanceClient } from "./DailyAttendanceClient";
 import { redirect } from "next/navigation";
@@ -47,7 +47,11 @@ export default async function DailyAttendancePage({
         redirect(`/admin/attendance/daily?${redirectParams.toString()}`);
     }
 
-    const stores = await getAllStores();
+    // manager は担当店舗のみ。owner / sharoushi は全店舗
+    const stores =
+        user.role === "manager"
+            ? await getManagerStores(user.employeeId)
+            : await getAllStores();
 
     if (stores.length === 0) {
         return (
