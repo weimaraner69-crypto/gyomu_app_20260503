@@ -54,11 +54,15 @@ export async function getDailyAttendance(
     const clockInByEmployee = new Map<string, string>();
     const clockOutByEmployee = new Map<string, string>();
 
+    const startMs = new Date(start).getTime();
+    const endMs = new Date(end).getTime();
+
     for (const p of punches ?? []) {
+        const pMs = new Date(p.punched_at).getTime();
         if (
             p.punch_type === "clock_in" &&
-            p.punched_at >= start &&
-            p.punched_at < end &&
+            pMs >= startMs &&
+            pMs < endMs &&
             !clockInByEmployee.has(p.employee_id)
         ) {
             clockInByEmployee.set(p.employee_id, p.punched_at);
@@ -108,7 +112,7 @@ export async function getDailyAttendance(
 
         return {
             employeeId: es.employee_id,
-            employeeName: emp?.name_kanji ?? "不明",
+            employeeName: emp?.name_kanji ?? emp?.name_kana ?? "不明",
             clockIn,
             clockOut,
             workMinutes,
