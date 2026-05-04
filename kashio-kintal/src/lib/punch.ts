@@ -54,7 +54,6 @@ export function getNextPunchType(latest: PunchRecord | null): PunchType {
     return "clock_in";
 }
 
-/** 打刻種別の日本語ラベル */
 /**
  * 従業員の打刻履歴を月単位で取得する。
  * year, month は 1-based（例: 2026年5月 → year=2026, month=5）。
@@ -180,85 +179,6 @@ export async function getStoreEmployeesWithTodayStatus(
     });
 
     // 未退勤 → 先頭、打刻なし → 中間、退勤済み → 末尾
-    return employees.sort((a, b) => {
-        const order = (e: EmployeeWithTodayStatus) => {
-            if (e.latestTodayPunchType === "clock_in") return 0;
-            if (e.latestTodayPunchType === null) return 1;
-            return 2;
-        };
-        return order(a) - order(b);
-    });
-}
-
-/**
- * 当日（JST）の日付範囲を UTC ISO 文字列で返す。
- * JST 0:00〜23:59 を UTC に変換する。
- */
-export function getTodayUTCRange(): { start: string; end: string } {
-    const jstOffsetMs = 9 * 60 * 60 * 1000;
-    const now = new Date();
-    const jstNow = new Date(now.getTime() + jstOffsetMs);
-    const year = jstNow.getUTCFullYear();
-    const month = jstNow.getUTCMonth();
-    const day = jstNow.getUTCDate();
-    const start = new Date(Date.UTC(year, month, day) - jstOffsetMs).toISOString();
-    const end = new Date(Date.UTC(year, month, day + 1) - jstOffsetMs).toISOString();
-    return { start, end };
-}
-
-/**
- * 特定店舗の全スタッフと当日打刻状況を取得する。
- * 未退勤（clock_in のみ）スタッフを先頭に返す。
- */
-export async function getStoreEmployeesWithTodayStatus(
-    storeId: string
-): Promise<EmployeeWithTodayStatus[]> {
-    const supabase = await createClient();
-    const { start, end } = getTodayUTCRange();
-
-    // 店舗に所属する従業員を取得
-    const { data: empStores } = await supabase
-        .from("employee_stores")
-        .select("employee_id, employees(id, name)")
-        .eq("store_id", storeId);
-
-    if (!empStores || empStores.length === 0) return [];
-
-    const employeeIds = empStores.map((es) => es.employee_id);
-
-    // 当日の打刻記録を取得
-    const { data: punches } = await supabase
-        .from("punch_records")
-        .select("employee_id, punch_type, punched_at")
-        .eq("store_id", storeId)
-        .in("employee_id", employeeIds)
-        .gte("punched_at", start)
-        .lt("punched_at", end)
-        .order("punched_at", { ascending: false });
-
-    // 各従業員の最新打刻を集約（降順なので最初が最新）
-    const latestByEmployee = new Map<
-        string,
-        { punch_type: string; punched_at: string }
-    >();
-    for (const p of punches ?? []) {
-        if (!latestByEmployee.has(p.employee_id)) {
-            latestByEmployee.set(p.employee_id, p);
-        }
-    }
-
-    const employees: EmployeeWithTodayStatus[] = empStores.map((es) => {
-        const emp = es.employees as { id: string; name: string } | null;
-        const latest = latestByEmployee.get(es.employee_id) ?? null;
-        return {
-            id: es.employee_id,
-            name: emp?.name ?? "不明",
-            latestTodayPunchType: (latest?.punch_type ?? null) as PunchType | null,
-            latestTodayPunchedAt: latest?.punched_at ?? null,
-        };
-    });
-
-    // 未退勤（clock_in のみ）→ 先頭、打刻なし → 中間、退勤済み → 末尾
     return employees.sort((a, b) => {
         const order = (e: EmployeeWithTodayStatus) => {
             if (e.latestTodayPunchType === "clock_in") return 0;

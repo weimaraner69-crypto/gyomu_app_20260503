@@ -77,16 +77,21 @@ export async function getDailyAttendance(
         }
     }
 
-    // 各 clock_in に対応する clock_out をペアリング（降順の場合は最初の clock_out）
+    // 各 clock_in に対応する clock_out をペアリング
+    // clock_out が clock_in より後の時刻であることを条件にする（前日退勤など誤ペアを回避）
     for (const p of punches ?? []) {
         if (p.punch_type === "clock_out") {
             const pairs = punchPairsByEmployee.get(p.employee_id);
             if (pairs && pairs.length > 0) {
-                // 未ペアの clock_in を探す
+                const pOutMs = new Date(p.punched_at).getTime();
+                // 未ペアで、clock_out >= clock_in を満たす最初の clock_in を探す
                 for (const pair of pairs) {
                     if (pair.clockOut === null) {
-                        pair.clockOut = p.punched_at;
-                        break;
+                        const pInMs = new Date(pair.clockIn).getTime();
+                        if (pOutMs >= pInMs) {
+                            pair.clockOut = p.punched_at;
+                            break;
+                        }
                     }
                 }
             }
