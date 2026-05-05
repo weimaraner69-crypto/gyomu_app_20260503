@@ -1,10 +1,9 @@
 // 打刻ユーティリティ — punch_records への挿入・直近打刻取得（サーバー専用）
 // 純関数・型は @/lib/punch-utils からも import できます（クライアント側はそちらを使用）。
 import { createClient } from "@/lib/supabase/server";
-export type { PunchType, EmployeeWithTodayStatus } from "@/lib/punch-utils";
-export { punchTypeLabel, formatWorkMinutes } from "@/lib/punch-utils";
 import type { PunchType, EmployeeWithTodayStatus } from "@/lib/punch-utils";
-import { getTodayJST } from "@/lib/attendance-utils";
+export type { PunchType, EmployeeWithTodayStatus };
+export { punchTypeLabel, formatWorkMinutes } from "@/lib/punch-utils";
 
 export interface PunchRecord {
     id: string;
@@ -127,6 +126,16 @@ export function getTodayUTCRange(): { start: string; end: string } {
     return { start, end };
 }
 
+/** 営業日ではなくカレンダー日基準の JST 今日（YYYY-MM-DD）を返す */
+function getTodayCalendarJST(): string {
+    const jstOffsetMs = 9 * 60 * 60 * 1000;
+    const now = new Date(Date.now() + jstOffsetMs);
+    const y = now.getUTCFullYear();
+    const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(now.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
 /**
  * 特定店舗の全スタッフと当日打刻状況を取得する。
  * 未退勤（clock_in のみ）→ 先頭、打刻なし → 中間、退勤済み → 末尾 の順で返す。
@@ -137,8 +146,8 @@ export async function getStoreEmployeesWithTodayStatus(
     const supabase = await createClient();
     const { start, end } = getTodayUTCRange();
 
-    // 店舗に所属する有効な従業員を取得（JST 当日基準で退職済み・将来所属は除外）
-    const today = getTodayJST();
+    // 店舗に所属する有効な従業員を取得（打刻範囲と同じJSTカレンダー日で判定）
+    const today = getTodayCalendarJST();
     const { data: empStores, error: empError } = await supabase
         .from("employee_stores")
         .select("employee_id, employees(id, name_kanji, name_kana)")
@@ -155,7 +164,7 @@ export async function getStoreEmployeesWithTodayStatus(
     const employeeIds = empStores.map((es) => es.employee_id);
 
     // 当日の打刻記録を取得（降順なので先頭が最新）
-    const { data: punches } = await supabase
+    const { data: punches, error: punchesError } = await supabase
         .from("punch_records")
         .select("employee_id, punch_type, punched_at")
         .eq("store_id", storeId)
@@ -163,6 +172,10 @@ export async function getStoreEmployeesWithTodayStatus(
         .gte("punched_at", start)
         .lt("punched_at", end)
         .order("punched_at", { ascending: false });
+
+    if (punchesError) {
+        throw new Error(`打刻取得エラー: ${punchesError.message}`);
+    }
 
     // 各従業員の最新打刻を集約
     const latestByEmployee = new Map<

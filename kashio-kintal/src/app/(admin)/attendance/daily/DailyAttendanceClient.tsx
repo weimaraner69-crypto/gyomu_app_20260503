@@ -36,20 +36,23 @@ function StatusBadge({
     if (status === "working") {
         return (
             <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
-                ⚠ 未退勤
+                <span aria-hidden="true">⚠</span>
+                <span>未退勤</span>
             </span>
         );
     }
     if (status === "completed") {
         return (
             <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
-                ✓ 退勤済
+                <span aria-hidden="true">✓</span>
+                <span>退勤済</span>
             </span>
         );
     }
     return (
         <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-500">
-            — 打刻なし
+            <span aria-hidden="true">—</span>
+            <span>打刻なし</span>
         </span>
     );
 }
