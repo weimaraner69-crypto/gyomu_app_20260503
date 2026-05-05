@@ -106,4 +106,46 @@ scripts/run_pipeline.py --config configs/pipeline_default.toml
 - **Design by Contract**: すべてのドメイン型は frozen dataclass + `__post_init__` による不変条件検証を採用（N-002）
 - **フェイルクローズ（P-010）**: 制約違反時は `ConstraintViolationError` を送出し、処理を中断する
 - **設定の外部化**: アプリケーション設定は TOML ファイルで管理し、コードに埋め込まない
+---
+
+## kashio-kintal アーキテクチャ（Next.js アプリ）
+
+### 技術スタック
+
+- **Next.js 16 App Router**（TypeScript）+ Supabase（PostgreSQL + Auth）+ Vercel
+- メール送信: Resend
+
+### モジュール責務
+
+```
+kashio-kintal/src/
+├─ lib/
+│   ├─ supabase/           Supabase クライアント（client.ts / server.ts）
+│   ├─ auth.ts             requireRole() — ロールアクセス制御（サーバー専用）
+│   ├─ attendance-utils.ts 勤怠集計純関数・型定義（サーバー/クライアント共有）
+│   ├─ attendance.ts       勤怠 DB アクセス（サーバー専用）
+│   ├─ punch-utils.ts      打刻ユーティリティ純関数・型定義（サーバー/クライアント共有）
+│   └─ punch.ts            打刻 DB アクセス（サーバー専用）
+├─ app/
+│   ├─ (admin)/            管理画面（owner/manager/sharoushi）
+│   │   ├─ attendance/daily/    日別ビュー（B-003）
+│   │   ├─ attendance/staff/    人別ビュー（B-004）
+│   │   └─ punch-ipad/         iPad打刻（B-002）
+│   └─ (staff)/            スタッフ画面
+│       └─ punch/store/    スマホQR打刻（B-001）
+```
+
+### 依存ルール
+
+| モジュール | サーバー専用 | クライアント共有可 | 備考 |
+| --- | --- | --- | --- |
+| `attendance.ts` / `punch.ts` | ✅ | ❌ | supabase/server 依存のため |
+| `attendance-utils.ts` / `punch-utils.ts` | - | ✅ | 純関数のみ・DB アクセスなし |
+| `auth.ts` | ✅ | ❌ | supabase/server + cookies 依存 |
+
+### アクセス制御
+
+- `requireRole(roles)`: 未認証 → `/login` リダイレクト、ロール不一致 → 403
+- manager は担当店舗のみ閲覧可（`getManagerStores()` でフィルタ）
+- sharoushi は閲覧専用（`canEdit = false`）
 ````

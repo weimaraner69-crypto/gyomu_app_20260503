@@ -278,6 +278,18 @@ export interface MonthlyAttendanceSummary {
     totalNightMinutes: number;
 }
 
+/** 人別ビューの明細行 */
+export interface MonthlyAttendanceDetailRow {
+    dateStr: string; // YYYY-MM-DD (JST営業日)
+    storeId: string;
+    storeName: string;
+    clockIn: string;
+    clockOut: string | null;
+    workMinutes: number | null;
+    nightMinutes: number | null;
+    status: "working" | "completed";
+}
+
 /** 月次集計用の打刻レコード（store_id を含む） */
 export interface MonthlyPunchRecord {
     employee_id: string;
@@ -447,4 +459,106 @@ export function buildMonthlyAttendanceSummary(params: {
         totalWorkMinutes,
         totalNightMinutes,
     };
+}
+
+/** ISO UTC を JST 営業日（05:00区切り）の YYYY-MM-DD に変換 */
+function toBusinessDateJST(isoUtc: string): string {
+    const jstOffsetMs = 9 * 60 * 60 * 1000;
+    const businessDayStartHour = 5;
+    const d = new Date(new Date(isoUtc).getTime() + jstOffsetMs);
+    if (d.getUTCHours() < businessDayStartHour) {
+        d.setUTCDate(d.getUTCDate() - 1);
+    }
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+}
+
+/** 月全体の打刻一覧から人別ビューの明細行を組み立てる */
+export function buildMonthlyAttendanceDetailRows(params: {
+    employeeId: string;
+    punches: MonthlyPunchRecord[];
+    stores: StoreOption[];
+    start: string;
+    end: string;
+}): MonthlyAttendanceDetailRow[] {
+    const { employeeId, punches, stores, start, end } = params;
+    const startMs = new Date(start).getTime();
+    const endMs = new Date(end).getTime();
+    const storeMap = new Map(stores.map((s) => [s.id, s.name]));
+
+    const empPunches = punches.filter((p) => p.employee_id === employeeId);
+    const pairsByStore = new Map<string, { clockIn: string; clockOut: string | null }[]>();
+
+    for (const p of empPunches) {
+        const pMs = new Date(p.punched_at).getTime();
+        if (p.punch_type === "clock_in" && pMs >= startMs && pMs < endMs) {
+            const pairs = pairsByStore.get(p.store_id) ?? [];
+            pairs.push({ clockIn: p.punched_at, clockOut: null });
+            pairsByStore.set(p.store_id, pairs);
+        }
+    }
+
+    for (const p of empPunches) {
+        if (p.punch_type !== "clock_out") continue;
+        const pairs = pairsByStore.get(p.store_id);
+        if (!pairs || pairs.length === 0) continue;
+        const pOutMs = new Date(p.punched_at).getTime();
+        for (const pair of pairs) {
+            if (pair.clockOut !== null) continue;
+            const pInMs = new Date(pair.clockIn).getTime();
+            if (pOutMs >= pInMs) {
+                pair.clockOut = p.punched_at;
+                break;
+            }
+        }
+    }
+
+    const rows: MonthlyAttendanceDetailRow[] = [];
+    for (const [storeId, pairs] of pairsByStore) {
+        for (const pair of pairs) {
+            const pInMs = new Date(pair.clockIn).getTime();
+            const storeName = storeMap.get(storeId) ?? storeId;
+            if (!pair.clockOut) {
+                rows.push({
+                    dateStr: toBusinessDateJST(pair.clockIn),
+                    storeId,
+                    storeName,
+                    clockIn: pair.clockIn,
+                    clockOut: null,
+                    workMinutes: null,
+                    nightMinutes: null,
+                    status: "working",
+                });
+                continue;
+            }
+
+            const pOutMs = new Date(pair.clockOut).getTime();
+            if (pOutMs <= pInMs) continue;
+
+            const boundedOutMs = Math.min(pOutMs, endMs);
+            rows.push({
+                dateStr: toBusinessDateJST(pair.clockIn),
+                storeId,
+                storeName,
+                clockIn: pair.clockIn,
+                clockOut: pair.clockOut,
+                workMinutes: Math.floor((boundedOutMs - pInMs) / 60000),
+                nightMinutes: calcNightMinutes(
+                    pair.clockIn,
+                    new Date(boundedOutMs).toISOString()
+                ),
+                status: pOutMs > endMs ? "working" : "completed",
+            });
+        }
+    }
+
+    rows.sort((a, b) => {
+        const aMs = new Date(a.clockIn).getTime();
+        const bMs = new Date(b.clockIn).getTime();
+        return aMs - bMs;
+    });
+
+    return rows;
 }

@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth";
 import {
     getAllStores,
     getManagerStores,
+    getMonthlyAttendanceDetails,
     getMonthlyAttendanceSummary,
     getStaffList,
 } from "@/lib/attendance";
@@ -55,13 +56,14 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
         );
     }
 
-    // manager は担当店舗でスタッフを絞り込む
+    // owner / sharoushi は店舗フィルタ指定可能。manager は担当店舗すべてを対象。
     const filterStoreId =
-        user.role === "manager" ? stores[0].id : params.storeId;
+        user.role === "manager" ? undefined : params.storeId;
 
     const staffList = await getStaffList({
         yearMonth,
         storeId: filterStoreId,
+        storeIds: user.role === "manager" ? stores.map((s) => s.id) : undefined,
     });
 
     if (staffList.length === 0) {
@@ -90,10 +92,20 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
         redirect(`/admin/attendance/staff?${redirectParams.toString()}`);
     }
 
+    // manager は担当店舗の打刻のみ集計（担当外店舗の閲覧防止）
     const summary = await getMonthlyAttendanceSummary({
         employeeId: selectedStaff.employeeId,
         employeeName: selectedStaff.employeeName,
         yearMonth,
+        allowedStoreIds:
+            user.role === "manager" ? stores.map((s) => s.id) : undefined,
+    });
+
+    const details = await getMonthlyAttendanceDetails({
+        employeeId: selectedStaff.employeeId,
+        yearMonth,
+        allowedStoreIds:
+            user.role === "manager" ? stores.map((s) => s.id) : undefined,
     });
 
     const isManager = user.role === "manager";
@@ -101,6 +113,7 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
     return (
         <StaffAttendanceClient
             summary={summary}
+            details={details}
             staffList={staffList}
             stores={stores}
             selectedEmployeeId={selectedStaff.employeeId}

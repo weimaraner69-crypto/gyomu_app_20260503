@@ -5,6 +5,7 @@
  */
 
 import {
+    buildMonthlyAttendanceDetailRows,
     buildMonthlyAttendanceSummary,
     getAdjacentMonth,
     getCurrentMonth,
@@ -367,5 +368,70 @@ describe("buildMonthlyAttendanceSummary", () => {
         // 酒店 < 食堂（ja ロケール昇順）
         expect(result.storeBreakdowns[0].storeName).toBe("酒店");
         expect(result.storeBreakdowns[1].storeName).toBe("食堂");
+    });
+});
+
+describe("buildMonthlyAttendanceDetailRows", () => {
+    const EMP_ID = "emp-001";
+    const STORE_A = "store-a";
+    const stores: StoreOption[] = [{ id: STORE_A, name: "酒店" }];
+    const { start, end } = getMonthUTCRange("2026-05");
+
+    test("日付・店舗名・出退勤・勤務時間・深夜時間・ステータスが構築されること", () => {
+        const punches: MonthlyPunchRecord[] = [
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_in",
+                punched_at: "2026-05-10T00:00:00.000Z", // 09:00 JST
+                store_id: STORE_A,
+            },
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_out",
+                punched_at: "2026-05-10T08:00:00.000Z", // 17:00 JST
+                store_id: STORE_A,
+            },
+        ];
+
+        const rows = buildMonthlyAttendanceDetailRows({
+            employeeId: EMP_ID,
+            punches,
+            stores,
+            start,
+            end,
+        });
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0].dateStr).toBe("2026-05-10");
+        expect(rows[0].storeName).toBe("酒店");
+        expect(rows[0].clockIn).toBe("2026-05-10T00:00:00.000Z");
+        expect(rows[0].clockOut).toBe("2026-05-10T08:00:00.000Z");
+        expect(rows[0].workMinutes).toBe(480);
+        expect(rows[0].nightMinutes).toBe(0);
+        expect(rows[0].status).toBe("completed");
+    });
+
+    test("未退勤は status=working かつ勤務時間 null になること", () => {
+        const punches: MonthlyPunchRecord[] = [
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_in",
+                punched_at: "2026-05-15T00:00:00.000Z",
+                store_id: STORE_A,
+            },
+        ];
+
+        const rows = buildMonthlyAttendanceDetailRows({
+            employeeId: EMP_ID,
+            punches,
+            stores,
+            start,
+            end,
+        });
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0].status).toBe("working");
+        expect(rows[0].workMinutes).toBeNull();
+        expect(rows[0].nightMinutes).toBeNull();
     });
 });

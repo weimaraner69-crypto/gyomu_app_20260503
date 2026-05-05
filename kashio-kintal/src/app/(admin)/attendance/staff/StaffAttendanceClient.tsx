@@ -3,6 +3,7 @@
 // 勤怠管理（人別ビュー）— クライアントコンポーネント
 import { useRouter } from "next/navigation";
 import type {
+    MonthlyAttendanceDetailRow,
     MonthlyAttendanceSummary,
     StoreOption,
 } from "@/lib/attendance-utils";
@@ -16,6 +17,7 @@ interface StaffItem {
 
 interface Props {
     summary: MonthlyAttendanceSummary;
+    details: MonthlyAttendanceDetailRow[];
     staffList: StaffItem[];
     stores: StoreOption[];
     selectedEmployeeId: string;
@@ -26,6 +28,7 @@ interface Props {
 
 export function StaffAttendanceClient({
     summary,
+    details,
     staffList,
     stores,
     selectedEmployeeId,
@@ -61,6 +64,16 @@ export function StaffAttendanceClient({
 
     const hasData =
         summary.storeBreakdowns.length > 0 && summary.totalWorkMinutes > 0;
+
+    function toJSTTime(isoStr: string | null): string {
+        if (!isoStr) return "—";
+        return new Date(isoStr).toLocaleTimeString("ja-JP", {
+            timeZone: "Asia/Tokyo",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+        });
+    }
 
     return (
         <main className="p-4 md:p-6 max-w-4xl mx-auto">
@@ -142,6 +155,63 @@ export function StaffAttendanceClient({
                 </div>
             </div>
 
+            {/* 明細一覧 */}
+            <section aria-label="人別勤怠明細" className="mb-8">
+                <h2 className="text-lg font-semibold mb-3">
+                    {summary.employeeName}　{displayMonth} 明細
+                </h2>
+                {details.length === 0 ? (
+                    <p className="text-gray-500 text-sm">
+                        {displayMonth} の打刻データがありません。
+                    </p>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full border-collapse text-sm">
+                            <thead>
+                                <tr className="bg-gray-50">
+                                    <th className="border px-3 py-2 text-left font-medium text-gray-700">日付</th>
+                                    <th className="border px-3 py-2 text-left font-medium text-gray-700">店舗</th>
+                                    <th className="border px-3 py-2 text-right font-medium text-gray-700">出勤</th>
+                                    <th className="border px-3 py-2 text-right font-medium text-gray-700">退勤</th>
+                                    <th className="border px-3 py-2 text-right font-medium text-gray-700">勤務時間</th>
+                                    <th className="border px-3 py-2 text-right font-medium text-gray-700">深夜時間</th>
+                                    <th className="border px-3 py-2 text-left font-medium text-gray-700">ステータス</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {details.map((row, idx) => (
+                                    <tr key={`${row.storeId}-${row.clockIn}-${idx}`} className="hover:bg-gray-50">
+                                        <td className="border px-3 py-2">{row.dateStr}</td>
+                                        <td className="border px-3 py-2">{row.storeName}</td>
+                                        <td className="border px-3 py-2 text-right tabular-nums">{toJSTTime(row.clockIn)}</td>
+                                        <td className="border px-3 py-2 text-right tabular-nums">{toJSTTime(row.clockOut)}</td>
+                                        <td className="border px-3 py-2 text-right tabular-nums">
+                                            {row.workMinutes === null ? "—" : formatWorkMinutes(row.workMinutes)}
+                                        </td>
+                                        <td className="border px-3 py-2 text-right tabular-nums">
+                                            {row.nightMinutes === null ? "—" : formatWorkMinutes(row.nightMinutes)}
+                                        </td>
+                                        <td className="border px-3 py-2">
+                                            {row.status === "working" ? (
+                                                <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                                                    <span aria-hidden="true">⚠</span>
+                                                    <span>未退勤</span>
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                                                    <span aria-hidden="true">✓</span>
+                                                    <span>退勤済</span>
+                                                </span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </section>
+
             {/* 月次サマリー */}
             <section aria-label="月次勤怠サマリー">
                 <h2 className="text-lg font-semibold mb-3">
@@ -200,7 +270,7 @@ export function StaffAttendanceClient({
                                             summary.totalWorkMinutes -
                                                 summary.totalNightMinutes > 0
                                                 ? summary.totalWorkMinutes -
-                                                      summary.totalNightMinutes
+                                                summary.totalNightMinutes
                                                 : 0
                                         )}
                                     </td>
