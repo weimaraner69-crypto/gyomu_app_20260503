@@ -1,0 +1,4 @@
+- 変更後は該当テスト実行（Python or kashio-kintal Jest）。
+- CI相当のlint/type/testを確認。
+- docs更新要否（AC-030）を確認。
+- PRには検証手順・結果を記載（AC-040）。

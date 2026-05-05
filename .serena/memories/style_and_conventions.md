@@ -1,0 +1,4 @@
+- ドキュメント/説明は日本語、識別子は英語可（.github/copilot-instructions.md）。
+- 仕様判断は安全側（フェイルクローズ）、禁止操作・秘密情報コミット禁止。
+- Pythonは strict mypy, ruff line-length 100。
+- 変更時はSSOT docs整合を重視。
