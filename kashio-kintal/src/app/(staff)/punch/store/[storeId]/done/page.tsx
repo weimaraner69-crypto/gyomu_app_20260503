@@ -1,5 +1,6 @@
 // 打刻完了ページ — 打刻種別・時刻・店舗名を表示してOKで閉じる
 import { redirect } from "next/navigation";
+import { punchTypeLabel } from "@/lib/punch";
 import CloseButton from "./CloseButton";
 
 interface Props {
@@ -13,8 +14,18 @@ export default async function PunchDonePage({ searchParams }: Props) {
         redirect("/dashboard");
     }
 
-    const punchTypeLabel = type === "clock_in" ? "出勤" : "退勤";
+    // type が許可リスト以外の場合はリダイレクト
+    if (type !== "clock_in" && type !== "clock_out") {
+        redirect("/dashboard");
+    }
+
+    // 上記ガード後の type は clock_in / clock_out に絞り込まれる
+    const label = punchTypeLabel(type);
     const punchTime = new Date(at);
+    // at が不正な値（Invalid Date）の場合はダッシュボードにリダイレクト
+    if (isNaN(punchTime.getTime())) {
+        redirect("/dashboard");
+    }
     const timeStr = punchTime.toLocaleString("ja-JP", {
         timeZone: "Asia/Tokyo",
         year: "numeric",
@@ -56,7 +67,7 @@ export default async function PunchDonePage({ searchParams }: Props) {
                     <div className="flex justify-between">
                         <span className="text-sm text-gray-500">種別</span>
                         <span className="text-sm font-semibold text-gray-900">
-                            {punchTypeLabel}
+                            {label}
                         </span>
                     </div>
                     <div className="flex justify-between">
@@ -70,9 +81,6 @@ export default async function PunchDonePage({ searchParams }: Props) {
                 </div>
 
                 <CloseButton />
-                <p className="mt-2 text-xs text-gray-400">
-                    ※ このページを閉じてください
-                </p>
                 <p className="mt-2 text-xs text-gray-400">
                     ※ このページを閉じてください
                 </p>
