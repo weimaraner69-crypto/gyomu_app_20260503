@@ -191,17 +191,19 @@ export async function getStaffList(params: {
 }
 
 /**
- * 指定従業員・月の月次勤怠サマリーを取得する。
- * 月全体の打刻を一括取得し、店舗別に集計する。
- * allowedStoreIds 指定時は該当店舗のみを集計対象にする（manager 向け）。
+ * 月次集計・明細の共通入力データ（打刻 + 店舗）を取得する。
  */
-export async function getMonthlyAttendanceSummary(params: {
+async function getMonthlyAttendanceBase(params: {
     employeeId: string;
-    employeeName: string;
     yearMonth: string;
     allowedStoreIds?: string[];
-}): Promise<MonthlyAttendanceSummary> {
-    const { employeeId, employeeName, yearMonth, allowedStoreIds } = params;
+}): Promise<{
+    punches: MonthlyPunchRecord[];
+    stores: StoreOption[];
+    start: string;
+    end: string;
+}> {
+    const { employeeId, yearMonth, allowedStoreIds } = params;
     const supabase = await createClient();
     const { start, end } = getMonthUTCRange(yearMonth);
 
@@ -245,13 +247,38 @@ export async function getMonthlyAttendanceSummary(params: {
         stores = storeData ?? [];
     }
 
-    return buildMonthlyAttendanceSummary({
-        employeeId,
-        employeeName,
+    return {
         punches: (punches ?? []) as MonthlyPunchRecord[],
         stores,
         start,
         end,
+    };
+}
+
+/**
+ * 指定従業員・月の月次勤怠サマリーを取得する。
+ * allowedStoreIds 指定時は該当店舗のみを集計対象にする（manager 向け）。
+ */
+export async function getMonthlyAttendanceSummary(params: {
+    employeeId: string;
+    employeeName: string;
+    yearMonth: string;
+    allowedStoreIds?: string[];
+}): Promise<MonthlyAttendanceSummary> {
+    const { employeeId, employeeName, yearMonth, allowedStoreIds } = params;
+    const base = await getMonthlyAttendanceBase({
+        employeeId,
+        yearMonth,
+        allowedStoreIds,
+    });
+
+    return buildMonthlyAttendanceSummary({
+        employeeId,
+        employeeName,
+        punches: base.punches,
+        stores: base.stores,
+        start: base.start,
+        end: base.end,
     });
 }
 
@@ -265,52 +292,57 @@ export async function getMonthlyAttendanceDetails(params: {
     allowedStoreIds?: string[];
 }): Promise<MonthlyAttendanceDetailRow[]> {
     const { employeeId, yearMonth, allowedStoreIds } = params;
-    const supabase = await createClient();
-    const { start, end } = getMonthUTCRange(yearMonth);
-
-    const extendedStart = new Date(
-        new Date(start).getTime() - 24 * 60 * 60 * 1000
-    ).toISOString();
-    const extendedEnd = new Date(
-        new Date(end).getTime() + 24 * 60 * 60 * 1000
-    ).toISOString();
-
-    let punchQuery = supabase
-        .from("punch_records")
-        .select("employee_id, punch_type, punched_at, store_id")
-        .eq("employee_id", employeeId)
-        .gte("punched_at", extendedStart)
-        .lt("punched_at", extendedEnd)
-        .order("punched_at", { ascending: true });
-
-    if (allowedStoreIds && allowedStoreIds.length > 0) {
-        punchQuery = punchQuery.in("store_id", allowedStoreIds);
-    }
-
-    const { data: punches, error: punchError } = await punchQuery;
-    if (punchError) {
-        throw new Error(`打刻取得エラー: ${punchError.message}`);
-    }
-
-    const storeIds = [...new Set((punches ?? []).map((p) => p.store_id))];
-    let stores: StoreOption[] = [];
-    if (storeIds.length > 0) {
-        const { data: storeData, error: storeError } = await supabase
-            .from("stores")
-            .select("id, name")
-            .in("id", storeIds);
-
-        if (storeError) {
-            throw new Error(`店舗取得エラー: ${storeError.message}`);
-        }
-        stores = storeData ?? [];
-    }
+    const base = await getMonthlyAttendanceBase({
+        employeeId,
+        yearMonth,
+        allowedStoreIds,
+    });
 
     return buildMonthlyAttendanceDetailRows({
         employeeId,
-        punches: (punches ?? []) as MonthlyPunchRecord[],
-        stores,
-        start,
-        end,
+        punches: base.punches,
+        stores: base.stores,
+        start: base.start,
+        end: base.end,
     });
+}
+
+/**
+ * 指定従業員・月のサマリーと明細を一括取得する。
+ * DBアクセスは1回分の打刻取得 + 1回分の店舗取得に集約する。
+ */
+export async function getMonthlyAttendanceViewData(params: {
+    employeeId: string;
+    employeeName: string;
+    yearMonth: string;
+    allowedStoreIds?: string[];
+}): Promise<{
+    summary: MonthlyAttendanceSummary;
+    details: MonthlyAttendanceDetailRow[];
+}> {
+    const { employeeId, employeeName, yearMonth, allowedStoreIds } = params;
+    const base = await getMonthlyAttendanceBase({
+        employeeId,
+        yearMonth,
+        allowedStoreIds,
+    });
+
+    const summary = buildMonthlyAttendanceSummary({
+        employeeId,
+        employeeName,
+        punches: base.punches,
+        stores: base.stores,
+        start: base.start,
+        end: base.end,
+    });
+
+    const details = buildMonthlyAttendanceDetailRows({
+        employeeId,
+        punches: base.punches,
+        stores: base.stores,
+        start: base.start,
+        end: base.end,
+    });
+
+    return { summary, details };
 }

@@ -41,7 +41,7 @@ export function StaffAttendanceClient({
     function navigate(params: {
         month?: string;
         employee?: string;
-        storeId?: string;
+        storeId?: string | null;
     }) {
         const sp = new URLSearchParams();
         sp.set("month", params.month ?? yearMonth);
@@ -49,8 +49,14 @@ export function StaffAttendanceClient({
             "employee",
             params.employee ?? selectedEmployeeId
         );
-        if (params.storeId ?? selectedStoreId) {
-            sp.set("storeId", (params.storeId ?? selectedStoreId)!);
+        // params.storeId:
+        // - undefined: 現在の選択を維持
+        // - null: フィルタ解除（storeId を URL から削除）
+        // - string: 指定店舗で上書き
+        const nextStoreId =
+            params.storeId === undefined ? selectedStoreId : params.storeId;
+        if (nextStoreId) {
+            sp.set("storeId", nextStoreId);
         }
         router.push(`/admin/attendance/staff?${sp.toString()}`);
     }
@@ -62,8 +68,7 @@ export function StaffAttendanceClient({
     const [dispYear, dispMonthNum] = yearMonth.split("-").map(Number);
     const displayMonth = `${dispYear}年${dispMonthNum}月`;
 
-    const hasData =
-        summary.storeBreakdowns.length > 0 && summary.totalWorkMinutes > 0;
+    const hasSummaryData = summary.storeBreakdowns.length > 0;
 
     function toJSTTime(isoStr: string | null): string {
         if (!isoStr) return "—";
@@ -115,7 +120,7 @@ export function StaffAttendanceClient({
                             value={selectedStoreId ?? ""}
                             onChange={(e) =>
                                 navigate({
-                                    storeId: e.target.value || undefined,
+                                    storeId: e.target.value || null,
                                     employee: undefined,
                                 })
                             }
@@ -218,9 +223,11 @@ export function StaffAttendanceClient({
                     {summary.employeeName}　{displayMonth} 勤怠サマリー
                 </h2>
 
-                {!hasData ? (
+                {!hasSummaryData ? (
                     <p className="text-gray-500 text-sm">
-                        {displayMonth} の打刻データがありません。
+                        {details.length > 0
+                            ? `${displayMonth} は未退勤データのみのため、月次合計はありません。`
+                            : `${displayMonth} の打刻データがありません。`}
                     </p>
                 ) : (
                     <div className="overflow-x-auto">

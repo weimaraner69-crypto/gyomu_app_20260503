@@ -3,8 +3,7 @@ import { requireRole } from "@/lib/auth";
 import {
     getAllStores,
     getManagerStores,
-    getMonthlyAttendanceDetails,
-    getMonthlyAttendanceSummary,
+    getMonthlyAttendanceViewData,
     getStaffList,
 } from "@/lib/attendance";
 import { getCurrentMonth } from "@/lib/attendance-utils";
@@ -24,6 +23,13 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
 
     const params = await searchParams;
 
+    function buildQuery(month: string, employee?: string, storeId?: string): string {
+        const sp = new URLSearchParams({ month });
+        if (employee) sp.set("employee", employee);
+        if (storeId) sp.set("storeId", storeId);
+        return sp.toString();
+    }
+
     // month の形式検証：YYYY-MM 以外は当月にフォールバック
     const currentMonth = getCurrentMonth();
     let yearMonth = currentMonth;
@@ -34,11 +40,21 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
             yearMonth = rawMonth;
         } else {
             redirect(
-                `/admin/attendance/staff?month=${currentMonth}${params.employee ? `&employee=${params.employee}` : ""}`
+                `/admin/attendance/staff?${buildQuery(
+                    currentMonth,
+                    params.employee,
+                    params.storeId
+                )}`
             );
         }
     } else if (rawMonth) {
-        redirect(`/admin/attendance/staff?month=${currentMonth}`);
+        redirect(
+            `/admin/attendance/staff?${buildQuery(
+                currentMonth,
+                params.employee,
+                params.storeId
+            )}`
+        );
     }
 
     // manager は担当店舗のみ。owner / sharoushi は全店舗
@@ -53,6 +69,17 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
                 <h1 className="text-2xl font-bold mb-4">勤怠管理（人別）</h1>
                 <p className="text-gray-500">店舗が登録されていません。</p>
             </main>
+        );
+    }
+
+    // owner / sharoushi の storeId は候補店舗に含まれる値のみ許可
+    if (
+        user.role !== "manager" &&
+        params.storeId &&
+        !stores.some((s) => s.id === params.storeId)
+    ) {
+        redirect(
+            `/admin/attendance/staff?${buildQuery(yearMonth, params.employee)}`
         );
     }
 
@@ -92,17 +119,10 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
         redirect(`/admin/attendance/staff?${redirectParams.toString()}`);
     }
 
-    // manager は担当店舗の打刻のみ集計（担当外店舗の閲覧防止）
-    const summary = await getMonthlyAttendanceSummary({
+    // manager は担当店舗の打刻のみ取得（担当外店舗の閲覧防止）
+    const viewData = await getMonthlyAttendanceViewData({
         employeeId: selectedStaff.employeeId,
         employeeName: selectedStaff.employeeName,
-        yearMonth,
-        allowedStoreIds:
-            user.role === "manager" ? stores.map((s) => s.id) : undefined,
-    });
-
-    const details = await getMonthlyAttendanceDetails({
-        employeeId: selectedStaff.employeeId,
         yearMonth,
         allowedStoreIds:
             user.role === "manager" ? stores.map((s) => s.id) : undefined,
@@ -112,8 +132,8 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
 
     return (
         <StaffAttendanceClient
-            summary={summary}
-            details={details}
+            summary={viewData.summary}
+            details={viewData.details}
             staffList={staffList}
             stores={stores}
             selectedEmployeeId={selectedStaff.employeeId}

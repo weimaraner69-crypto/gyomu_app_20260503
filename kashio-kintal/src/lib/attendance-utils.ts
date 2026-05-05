@@ -397,6 +397,7 @@ export function buildMonthlyAttendanceSummary(params: {
         const pairs = completedPairsByStore.get(p.store_id);
         if (!pairs || pairs.length === 0) continue;
         const pOutMs = new Date(p.punched_at).getTime();
+        if (pOutMs > endMs) continue; // 05:00 またぎは未退勤扱い（月次確定値に含めない）
         for (const pair of pairs) {
             if (pair.clockOut !== null) continue;
             const pInMs = new Date(pair.clockIn).getTime();
@@ -505,6 +506,7 @@ export function buildMonthlyAttendanceDetailRows(params: {
         const pairs = pairsByStore.get(p.store_id);
         if (!pairs || pairs.length === 0) continue;
         const pOutMs = new Date(p.punched_at).getTime();
+        if (pOutMs > endMs) continue; // 05:00 またぎは未退勤扱い
         for (const pair of pairs) {
             if (pair.clockOut !== null) continue;
             const pInMs = new Date(pair.clockIn).getTime();
