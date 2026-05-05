@@ -19,8 +19,8 @@ export default async function PunchDonePage({ searchParams }: Props) {
         redirect("/dashboard");
     }
 
-    // punchTypeLabel は punch.ts の関数で一元管理
-    const label = punchTypeLabel(type as "clock_in" | "clock_out");
+    // 上記ガード後の type は clock_in / clock_out に絞り込まれる
+    const label = punchTypeLabel(type);
     const punchTime = new Date(at);
     // at が不正な値（Invalid Date）の場合はダッシュボードにリダイレクト
     if (isNaN(punchTime.getTime())) {
