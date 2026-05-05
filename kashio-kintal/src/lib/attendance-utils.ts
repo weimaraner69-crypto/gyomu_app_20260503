@@ -331,9 +331,14 @@ export function getAdjacentMonth(
 }
 
 /** 現在月の YYYY-MM を返す（JST 基準） */
-export function getCurrentMonth(): string {
+export function getCurrentMonth(nowMs: number = Date.now()): string {
     const jstOffsetMs = 9 * 60 * 60 * 1000;
-    const now = new Date(Date.now() + jstOffsetMs);
+    const businessDayStartHour = 5;
+    const now = new Date(nowMs + jstOffsetMs);
+    // 00:00〜04:59 は前営業日扱いのため、月判定も前日側に寄せる
+    if (now.getUTCHours() < businessDayStartHour) {
+        now.setUTCDate(now.getUTCDate() - 1);
+    }
     const y = now.getUTCFullYear();
     const m = String(now.getUTCMonth() + 1).padStart(2, "0");
     return `${y}-${m}`;
@@ -343,7 +348,7 @@ export function getCurrentMonth(): string {
  * 月全体の打刻一覧から従業員の月次勤怠サマリーを組み立てる純関数。
  *
  * - clock_in は月の UTC 範囲 [start, end) 内のものを対象にする
- * - 月末をまたぐペア（clockOut が end を超える）は月次合計に含める（月内分のみ計算）
+ * - 月末をまたぐペア（clockOut が end を超える）は 05:00 またぎとして未退勤扱いにする
  * - 未退勤（clockOut === null）は勤務時間 0 として扱う（月次集計の確定値のみ対象）
  */
 export function buildMonthlyAttendanceSummary(params: {

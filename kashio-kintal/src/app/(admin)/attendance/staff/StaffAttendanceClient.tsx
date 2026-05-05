@@ -238,6 +238,9 @@ export function StaffAttendanceClient({
                                         店舗
                                     </th>
                                     <th className="border px-4 py-2 text-right font-medium text-gray-700">
+                                        総勤務時間
+                                    </th>
+                                    <th className="border px-4 py-2 text-right font-medium text-gray-700">
                                         通常時間
                                     </th>
                                     <th className="border px-4 py-2 text-right font-medium text-gray-700">
@@ -253,6 +256,9 @@ export function StaffAttendanceClient({
                                     >
                                         <td className="border px-4 py-2">
                                             {row.storeName}
+                                        </td>
+                                        <td className="border px-4 py-2 text-right tabular-nums">
+                                            {formatWorkMinutes(row.workMinutes)}
                                         </td>
                                         <td className="border px-4 py-2 text-right tabular-nums">
                                             {formatWorkMinutes(
@@ -271,6 +277,9 @@ export function StaffAttendanceClient({
                                 <tr className="bg-gray-100 font-semibold">
                                     <td className="border px-4 py-2">
                                         全店舗 合計
+                                    </td>
+                                    <td className="border px-4 py-2 text-right tabular-nums">
+                                        {formatWorkMinutes(summary.totalWorkMinutes)}
                                     </td>
                                     <td className="border px-4 py-2 text-right tabular-nums">
                                         {formatWorkMinutes(

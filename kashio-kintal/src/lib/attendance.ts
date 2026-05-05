@@ -191,6 +191,38 @@ export async function getStaffList(params: {
 }
 
 /**
+ * 指定従業員が対象月に所属している店舗ID一覧を返す。
+ * managerStoreIds 指定時はその集合との共通部分のみ返す。
+ */
+export async function getEmployeeStoreIdsForMonth(params: {
+    employeeId: string;
+    yearMonth: string;
+    managerStoreIds?: string[];
+}): Promise<string[]> {
+    const { employeeId, yearMonth, managerStoreIds } = params;
+    const supabase = await createClient();
+    const { firstDay, lastDay } = getMonthUTCRange(yearMonth);
+
+    let query = supabase
+        .from("employee_stores")
+        .select("store_id")
+        .eq("employee_id", employeeId)
+        .lte("valid_from", lastDay)
+        .or(`valid_to.is.null,valid_to.gte.${firstDay}`);
+
+    if (managerStoreIds && managerStoreIds.length > 0) {
+        query = query.in("store_id", managerStoreIds);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+        throw new Error(`従業員所属店舗取得エラー: ${error.message}`);
+    }
+
+    return [...new Set((data ?? []).map((r) => r.store_id as string))];
+}
+
+/**
  * 月次集計・明細の共通入力データ（打刻 + 店舗）を取得する。
  */
 async function getMonthlyAttendanceBase(params: {

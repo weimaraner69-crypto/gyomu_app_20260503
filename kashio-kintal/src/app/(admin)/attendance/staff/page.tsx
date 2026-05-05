@@ -1,6 +1,7 @@
 // 勤怠管理（人別ビュー）— サーバーコンポーネント
 import { requireRole } from "@/lib/auth";
 import {
+    getEmployeeStoreIdsForMonth,
     getAllStores,
     getManagerStores,
     getMonthlyAttendanceViewData,
@@ -67,7 +68,11 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
         return (
             <main className="p-6">
                 <h1 className="text-2xl font-bold mb-4">勤怠管理（人別）</h1>
-                <p className="text-gray-500">店舗が登録されていません。</p>
+                <p className="text-gray-500">
+                    {user.role === "manager"
+                        ? "担当店舗が割り当てられていません。"
+                        : "店舗が登録されていません。"}
+                </p>
             </main>
         );
     }
@@ -119,13 +124,22 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
         redirect(`/admin/attendance/staff?${redirectParams.toString()}`);
     }
 
-    // manager は担当店舗の打刻のみ取得（担当外店舗の閲覧防止）
+    // manager は「担当店舗 ∩ 選択従業員の対象月所属店舗」のみを参照
+    const managerAllowedStoreIds =
+        user.role === "manager"
+            ? await getEmployeeStoreIdsForMonth({
+                  employeeId: selectedStaff.employeeId,
+                  yearMonth,
+                  managerStoreIds: stores.map((s) => s.id),
+              })
+            : undefined;
+
+    // manager は対象従業員の月内所属店舗に限定して取得（担当外店舗の閲覧防止）
     const viewData = await getMonthlyAttendanceViewData({
         employeeId: selectedStaff.employeeId,
         employeeName: selectedStaff.employeeName,
         yearMonth,
-        allowedStoreIds:
-            user.role === "manager" ? stores.map((s) => s.id) : undefined,
+        allowedStoreIds: managerAllowedStoreIds,
     });
 
     const isManager = user.role === "manager";

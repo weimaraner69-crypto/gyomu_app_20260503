@@ -69,6 +69,18 @@ describe("getCurrentMonth", () => {
         expect(month).toBeGreaterThanOrEqual(1);
         expect(month).toBeLessThanOrEqual(12);
     });
+
+    test("JST 05:00 より前は前営業日側の月を返すこと", () => {
+        // 2026-06-01 04:00 JST = 2026-05-31T19:00:00.000Z
+        const nowMs = new Date("2026-05-31T19:00:00.000Z").getTime();
+        expect(getCurrentMonth(nowMs)).toBe("2026-05");
+    });
+
+    test("JST 05:00 以降は当日の月を返すこと", () => {
+        // 2026-06-01 05:00 JST = 2026-05-31T20:00:00.000Z
+        const nowMs = new Date("2026-05-31T20:00:00.000Z").getTime();
+        expect(getCurrentMonth(nowMs)).toBe("2026-06");
+    });
 });
 
 // ─── getMonthUTCRange ─────────────────────────────────────────────────────────
