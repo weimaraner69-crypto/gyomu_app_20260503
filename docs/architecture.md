@@ -148,4 +148,3 @@ kashio-kintal/src/
 - `requireRole(roles)`: 未認証 → `/login` リダイレクト、ロール不一致 → 403
 - manager は担当店舗のみ閲覧可（`getManagerStores()` でフィルタ）
 - sharoushi は閲覧専用（`canEdit = false`）
-````
