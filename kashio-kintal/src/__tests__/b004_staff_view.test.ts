@@ -434,4 +434,35 @@ describe("buildMonthlyAttendanceDetailRows", () => {
         expect(rows[0].workMinutes).toBeNull();
         expect(rows[0].nightMinutes).toBeNull();
     });
+
+    test("月末をまたぐ退勤でも status=completed になること", () => {
+        // 2026-05-31 23:00 JST 〜 2026-06-01 02:00 JST
+        const punches: MonthlyPunchRecord[] = [
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_in",
+                punched_at: "2026-05-31T14:00:00.000Z",
+                store_id: STORE_A,
+            },
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_out",
+                punched_at: "2026-05-31T17:00:00.000Z",
+                store_id: STORE_A,
+            },
+        ];
+
+        const rows = buildMonthlyAttendanceDetailRows({
+            employeeId: EMP_ID,
+            punches,
+            stores,
+            start,
+            end,
+        });
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0].status).toBe("completed");
+        // end で切り捨てられるため、勤務時間は 23:00〜翌05:00 のうち月内分
+        expect(rows[0].workMinutes).toBeGreaterThan(0);
+    });
 });

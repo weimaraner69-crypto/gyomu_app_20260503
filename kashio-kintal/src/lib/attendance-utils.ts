@@ -549,7 +549,7 @@ export function buildMonthlyAttendanceDetailRows(params: {
                     pair.clockIn,
                     new Date(boundedOutMs).toISOString()
                 ),
-                status: pOutMs > endMs ? "working" : "completed",
+                status: "completed",
             });
         }
     }
