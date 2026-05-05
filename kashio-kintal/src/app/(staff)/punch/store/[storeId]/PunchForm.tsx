@@ -3,8 +3,8 @@
 // 打刻フォーム — GPS 取得 + 打刻ボタン（クライアントコンポーネント）
 import { useActionState, useEffect, useRef } from "react";
 import type { PunchState } from "./actions";
-import type { PunchType } from "@/lib/punch";
-import { punchTypeLabel } from "@/lib/punch";
+import type { PunchType } from "@/lib/punch-utils";
+import { punchTypeLabel } from "@/lib/punch-utils";
 
 interface PunchFormProps {
     nextPunchType: PunchType;
