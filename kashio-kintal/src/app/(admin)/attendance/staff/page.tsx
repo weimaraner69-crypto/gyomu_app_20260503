@@ -7,7 +7,8 @@ import {
     getMonthlyAttendanceViewData,
     getStaffList,
 } from "@/lib/attendance";
-import { getCurrentMonth } from "@/lib/attendance-utils";
+import { getAdjacentMonth, getCurrentMonth } from "@/lib/attendance-utils";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StaffAttendanceClient } from "./StaffAttendanceClient";
 
@@ -99,12 +100,28 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
     });
 
     if (staffList.length === 0) {
+        const prevMonth = getAdjacentMonth(yearMonth, "prev");
+        const nextMonth = getAdjacentMonth(yearMonth, "next");
         return (
-            <main className="p-6">
+            <main className="p-6 max-w-4xl mx-auto">
                 <h1 className="text-2xl font-bold mb-4">勤怠管理（人別）</h1>
-                <p className="text-gray-500">
+                <p className="text-gray-500 mb-4">
                     {yearMonth} に所属するスタッフが見つかりません。
                 </p>
+                <div className="flex items-center gap-3">
+                    <Link
+                        className="rounded border px-3 py-1 text-sm hover:bg-gray-100"
+                        href={`/admin/attendance/staff?${buildQuery(prevMonth, undefined, filterStoreId)}`}
+                    >
+                        ← 前月
+                    </Link>
+                    <Link
+                        className="rounded border px-3 py-1 text-sm hover:bg-gray-100"
+                        href={`/admin/attendance/staff?${buildQuery(nextMonth, undefined, filterStoreId)}`}
+                    >
+                        翌月 →
+                    </Link>
+                </div>
             </main>
         );
     }

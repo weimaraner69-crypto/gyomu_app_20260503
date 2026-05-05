@@ -310,8 +310,8 @@ describe("buildMonthlyAttendanceSummary", () => {
         expect(result.totalWorkMinutes).toBe(0);
     });
 
-    test("月末をまたぐ退勤（clockOut > end）は月次合計に含まれないこと", () => {
-        const punches: MonthlyPunchRecord[] = [
+    test("月末をまたぐ退勤（clockOut >= end）は月次合計に含まれないこと", () => {
+        const punchesAtEnd: MonthlyPunchRecord[] = [
             {
                 employee_id: EMP_ID,
                 punch_type: "clock_in",
@@ -321,22 +321,47 @@ describe("buildMonthlyAttendanceSummary", () => {
             {
                 employee_id: EMP_ID,
                 punch_type: "clock_out",
-                punched_at: "2026-05-31T21:00:00.000Z", // 06:00 JST (翌営業日, end 超過)
+                punched_at: "2026-05-31T20:00:00.000Z", // 05:00 JST (end ちょうど)
                 store_id: STORE_A,
             },
         ];
 
-        const result = buildMonthlyAttendanceSummary({
+        const punchesOverEnd: MonthlyPunchRecord[] = [
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_in",
+                punched_at: "2026-05-31T14:00:00.000Z", // 23:00 JST
+                store_id: STORE_A,
+            },
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_out",
+                punched_at: "2026-05-31T21:00:00.000Z", // 06:00 JST (end 超過)
+                store_id: STORE_A,
+            },
+        ];
+
+        const resultAtEnd = buildMonthlyAttendanceSummary({
             employeeId: EMP_ID,
             employeeName: "テスト太郎",
-            punches,
+            punches: punchesAtEnd,
+            stores,
+            start,
+            end,
+        });
+        const resultOverEnd = buildMonthlyAttendanceSummary({
+            employeeId: EMP_ID,
+            employeeName: "テスト太郎",
+            punches: punchesOverEnd,
             stores,
             start,
             end,
         });
 
-        expect(result.totalWorkMinutes).toBe(0);
-        expect(result.totalNightMinutes).toBe(0);
+        expect(resultAtEnd.totalWorkMinutes).toBe(0);
+        expect(resultAtEnd.totalNightMinutes).toBe(0);
+        expect(resultOverEnd.totalWorkMinutes).toBe(0);
+        expect(resultOverEnd.totalNightMinutes).toBe(0);
     });
 
     test("店舗名が不明な店舗は store_id をフォールバックとして使うこと", () => {
@@ -476,9 +501,8 @@ describe("buildMonthlyAttendanceDetailRows", () => {
         expect(rows[0].nightMinutes).toBeNull();
     });
 
-    test("月末をまたぐ退勤は 05:00 またぎとして未退勤扱いになること", () => {
-        // 2026-05-31 23:00 JST 〜 2026-06-01 02:00 JST
-        const punches: MonthlyPunchRecord[] = [
+    test("月末をまたぐ退勤（clockOut >= end）は 05:00 またぎとして未退勤扱いになること", () => {
+        const punchesAtEnd: MonthlyPunchRecord[] = [
             {
                 employee_id: EMP_ID,
                 punch_type: "clock_in",
@@ -488,22 +512,49 @@ describe("buildMonthlyAttendanceDetailRows", () => {
             {
                 employee_id: EMP_ID,
                 punch_type: "clock_out",
-                punched_at: "2026-05-31T21:00:00.000Z",
+                punched_at: "2026-05-31T20:00:00.000Z", // end ちょうど
                 store_id: STORE_A,
             },
         ];
 
-        const rows = buildMonthlyAttendanceDetailRows({
+        const punchesOverEnd: MonthlyPunchRecord[] = [
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_in",
+                punched_at: "2026-05-31T14:00:00.000Z",
+                store_id: STORE_A,
+            },
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_out",
+                punched_at: "2026-05-31T21:00:00.000Z", // end 超過
+                store_id: STORE_A,
+            },
+        ];
+
+        const rowsAtEnd = buildMonthlyAttendanceDetailRows({
             employeeId: EMP_ID,
-            punches,
+            punches: punchesAtEnd,
+            stores,
+            start,
+            end,
+        });
+        const rowsOverEnd = buildMonthlyAttendanceDetailRows({
+            employeeId: EMP_ID,
+            punches: punchesOverEnd,
             stores,
             start,
             end,
         });
 
-        expect(rows).toHaveLength(1);
-        expect(rows[0].status).toBe("working");
-        expect(rows[0].workMinutes).toBeNull();
-        expect(rows[0].nightMinutes).toBeNull();
+        expect(rowsAtEnd).toHaveLength(1);
+        expect(rowsAtEnd[0].status).toBe("working");
+        expect(rowsAtEnd[0].workMinutes).toBeNull();
+        expect(rowsAtEnd[0].nightMinutes).toBeNull();
+
+        expect(rowsOverEnd).toHaveLength(1);
+        expect(rowsOverEnd[0].status).toBe("working");
+        expect(rowsOverEnd[0].workMinutes).toBeNull();
+        expect(rowsOverEnd[0].nightMinutes).toBeNull();
     });
 });
