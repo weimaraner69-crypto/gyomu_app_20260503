@@ -258,3 +258,193 @@ export function buildDailyAttendanceRecords(params: {
     };
     return records.sort((a, b) => order[a.status] - order[b.status]);
 }
+
+// ─── 月次集計 ───────────────────────────────────────────────
+
+/** 店舗別の月次勤怠サマリー */
+export interface MonthlyStoreBreakdown {
+    storeId: string;
+    storeName: string;
+    workMinutes: number;
+    nightMinutes: number;
+}
+
+/** 従業員の月次勤怠サマリー */
+export interface MonthlyAttendanceSummary {
+    employeeId: string;
+    employeeName: string;
+    storeBreakdowns: MonthlyStoreBreakdown[];
+    totalWorkMinutes: number;
+    totalNightMinutes: number;
+}
+
+/** 月次集計用の打刻レコード（store_id を含む） */
+export interface MonthlyPunchRecord {
+    employee_id: string;
+    punch_type: AttendancePunchType;
+    punched_at: string;
+    store_id: string;
+}
+
+/**
+ * YYYY-MM 形式の月から月全体の UTC 範囲を返す（営業日区切り JST 05:00 適用）。
+ * 範囲は 1日目の JST 05:00（UTC 前日 20:00）〜 末日の翌日 JST 05:00 まで。
+ */
+export function getMonthUTCRange(yearMonth: string): {
+    start: string;
+    end: string;
+    firstDay: string;
+    lastDay: string;
+} {
+    const [year, month] = yearMonth.split("-").map(Number);
+    const firstDay = `${year}-${String(month).padStart(2, "0")}-01`;
+    const lastDayNum = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const lastDay = `${year}-${String(month).padStart(2, "0")}-${String(lastDayNum).padStart(2, "0")}`;
+    const { start } = getDateUTCRange(firstDay);
+    const { end } = getDateUTCRange(lastDay);
+    return { start, end, firstDay, lastDay };
+}
+
+/** YYYY-MM の前月・翌月を返す */
+export function getAdjacentMonth(
+    yearMonth: string,
+    direction: "prev" | "next"
+): string {
+    const [year, month] = yearMonth.split("-").map(Number);
+    const base = new Date(Date.UTC(year, month - 1, 1));
+    base.setUTCMonth(base.getUTCMonth() + (direction === "prev" ? -1 : 1));
+    const y = base.getUTCFullYear();
+    const m = String(base.getUTCMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+}
+
+/** 現在月の YYYY-MM を返す（JST 基準） */
+export function getCurrentMonth(): string {
+    const jstOffsetMs = 9 * 60 * 60 * 1000;
+    const now = new Date(Date.now() + jstOffsetMs);
+    const y = now.getUTCFullYear();
+    const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+}
+
+/**
+ * 月全体の打刻一覧から従業員の月次勤怠サマリーを組み立てる純関数。
+ *
+ * - clock_in は月の UTC 範囲 [start, end) 内のものを対象にする
+ * - 月末をまたぐペア（clockOut が end を超える）は月次合計に含める（月内分のみ計算）
+ * - 未退勤（clockOut === null）は勤務時間 0 として扱う（月次集計の確定値のみ対象）
+ */
+export function buildMonthlyAttendanceSummary(params: {
+    employeeId: string;
+    employeeName: string;
+    punches: MonthlyPunchRecord[];
+    stores: StoreOption[];
+    start: string;
+    end: string;
+}): MonthlyAttendanceSummary {
+    const { employeeId, employeeName, punches, stores, start, end } = params;
+
+    const startMs = new Date(start).getTime();
+    const endMs = new Date(end).getTime();
+
+    const storeMap = new Map(stores.map((s) => [s.id, s.name]));
+    const breakdownMap = new Map<
+        string,
+        { workMinutes: number; nightMinutes: number }
+    >();
+
+    // 従業員の打刻のみ抽出
+    const empPunches = punches.filter((p) => p.employee_id === employeeId);
+
+    // 店舗別に clock_in を収集し、対応する clock_out とペアにする
+    const openPairsByStore = new Map<string, { clockIn: string }[]>();
+
+    for (const p of empPunches) {
+        const pMs = new Date(p.punched_at).getTime();
+        if (p.punch_type === "clock_in" && pMs >= startMs && pMs < endMs) {
+            const pairs = openPairsByStore.get(p.store_id) ?? [];
+            pairs.push({ clockIn: p.punched_at });
+            openPairsByStore.set(p.store_id, pairs);
+        }
+    }
+
+    // clock_out をペアに対応付け
+    const completedPairsByStore = new Map<
+        string,
+        { clockIn: string; clockOut: string | null }[]
+    >();
+    for (const [storeId, pairs] of openPairsByStore) {
+        completedPairsByStore.set(
+            storeId,
+            pairs.map((p) => ({ ...p, clockOut: null }))
+        );
+    }
+
+    for (const p of empPunches) {
+        if (p.punch_type !== "clock_out") continue;
+        const pairs = completedPairsByStore.get(p.store_id);
+        if (!pairs || pairs.length === 0) continue;
+        const pOutMs = new Date(p.punched_at).getTime();
+        for (const pair of pairs) {
+            if (pair.clockOut !== null) continue;
+            const pInMs = new Date(pair.clockIn).getTime();
+            if (pOutMs >= pInMs) {
+                pair.clockOut = p.punched_at;
+                break;
+            }
+        }
+    }
+
+    // 店舗別集計
+    for (const [storeId, pairs] of completedPairsByStore) {
+        let workMinutes = 0;
+        let nightMinutes = 0;
+        for (const pair of pairs) {
+            if (!pair.clockOut) continue; // 未退勤は月次確定値に含めない
+            const pInMs = new Date(pair.clockIn).getTime();
+            const pOutMs = Math.min(
+                new Date(pair.clockOut).getTime(),
+                endMs // 月末またぎの場合は月末で切り捨て
+            );
+            if (pOutMs > pInMs) {
+                workMinutes += Math.floor((pOutMs - pInMs) / 60000);
+                nightMinutes += calcNightMinutes(
+                    pair.clockIn,
+                    new Date(pOutMs).toISOString()
+                );
+            }
+        }
+        if (workMinutes > 0 || nightMinutes > 0) {
+            breakdownMap.set(storeId, { workMinutes, nightMinutes });
+        }
+    }
+
+    const storeBreakdowns: MonthlyStoreBreakdown[] = [];
+    for (const [storeId, breakdown] of breakdownMap) {
+        storeBreakdowns.push({
+            storeId,
+            storeName: storeMap.get(storeId) ?? storeId,
+            workMinutes: breakdown.workMinutes,
+            nightMinutes: breakdown.nightMinutes,
+        });
+    }
+    // 店舗名昇順
+    storeBreakdowns.sort((a, b) => a.storeName.localeCompare(b.storeName, "ja"));
+
+    const totalWorkMinutes = storeBreakdowns.reduce(
+        (acc, s) => acc + s.workMinutes,
+        0
+    );
+    const totalNightMinutes = storeBreakdowns.reduce(
+        (acc, s) => acc + s.nightMinutes,
+        0
+    );
+
+    return {
+        employeeId,
+        employeeName,
+        storeBreakdowns,
+        totalWorkMinutes,
+        totalNightMinutes,
+    };
+}

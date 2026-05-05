@@ -6,9 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 import {
     type AttendancePunchRecord,
     buildDailyAttendanceRecords,
+    buildMonthlyAttendanceSummary,
     type DailyAttendanceRecord,
+    type MonthlyAttendanceSummary,
+    type MonthlyPunchRecord,
     type StoreOption,
     getDateUTCRange,
+    getMonthUTCRange,
     getTodayJST,
 } from "@/lib/attendance-utils";
 
@@ -127,4 +131,114 @@ export async function getManagerStores(employeeId: string): Promise<StoreOption[
             return store ? { id: store.id, name: store.name } : null;
         })
         .filter((s): s is StoreOption => s !== null);
+}
+
+/**
+ * 指定月に所属していた全従業員の一覧を取得する。
+ * storeId 指定時はその店舗のみ対象。未指定時は全店舗を対象にする。
+ * 月の範囲と employee_stores の valid_from/valid_to を照合する。
+ */
+export async function getStaffList(params: {
+    yearMonth: string;
+    storeId?: string;
+}): Promise<{ employeeId: string; employeeName: string }[]> {
+    const { yearMonth, storeId } = params;
+    const supabase = await createClient();
+    const { firstDay, lastDay } = getMonthUTCRange(yearMonth);
+
+    let query = supabase
+        .from("employee_stores")
+        .select("employee_id, employees(id, name_kanji, name_kana)")
+        .lte("valid_from", lastDay)
+        .or(`valid_to.is.null,valid_to.gte.${firstDay}`);
+
+    if (storeId) {
+        query = query.eq("store_id", storeId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        throw new Error(`従業員一覧取得エラー: ${error.message}`);
+    }
+
+    if (!data || data.length === 0) return [];
+
+    // 重複排除（複数店舗兼務の場合）
+    const seen = new Set<string>();
+    const result: { employeeId: string; employeeName: string }[] = [];
+    for (const row of data) {
+        if (seen.has(row.employee_id)) continue;
+        seen.add(row.employee_id);
+        const emp = row.employees as {
+            id: string;
+            name_kanji: string | null;
+            name_kana: string | null;
+        } | null;
+        result.push({
+            employeeId: row.employee_id,
+            employeeName: emp?.name_kanji ?? emp?.name_kana ?? "不明",
+        });
+    }
+    return result.sort((a, b) =>
+        a.employeeName.localeCompare(b.employeeName, "ja")
+    );
+}
+
+/**
+ * 指定従業員・月の全店舗の月次勤怠サマリーを取得する。
+ * 月全体の打刻を一括取得し、店舗別に集計する。
+ */
+export async function getMonthlyAttendanceSummary(params: {
+    employeeId: string;
+    employeeName: string;
+    yearMonth: string;
+}): Promise<MonthlyAttendanceSummary> {
+    const { employeeId, employeeName, yearMonth } = params;
+    const supabase = await createClient();
+    const { start, end } = getMonthUTCRange(yearMonth);
+
+    // 月全体の打刻を前後バッファ付きで取得（月またぎのペアに対応）
+    const extendedStart = new Date(
+        new Date(start).getTime() - 24 * 60 * 60 * 1000
+    ).toISOString();
+    const extendedEnd = new Date(
+        new Date(end).getTime() + 24 * 60 * 60 * 1000
+    ).toISOString();
+
+    const { data: punches, error: punchError } = await supabase
+        .from("punch_records")
+        .select("employee_id, punch_type, punched_at, store_id")
+        .eq("employee_id", employeeId)
+        .gte("punched_at", extendedStart)
+        .lt("punched_at", extendedEnd)
+        .order("punched_at", { ascending: true });
+
+    if (punchError) {
+        throw new Error(`打刻取得エラー: ${punchError.message}`);
+    }
+
+    // 打刻に含まれる店舗の情報を取得
+    const storeIds = [...new Set((punches ?? []).map((p) => p.store_id))];
+    let stores: StoreOption[] = [];
+    if (storeIds.length > 0) {
+        const { data: storeData, error: storeError } = await supabase
+            .from("stores")
+            .select("id, name")
+            .in("id", storeIds);
+
+        if (storeError) {
+            throw new Error(`店舗取得エラー: ${storeError.message}`);
+        }
+        stores = storeData ?? [];
+    }
+
+    return buildMonthlyAttendanceSummary({
+        employeeId,
+        employeeName,
+        punches: (punches ?? []) as MonthlyPunchRecord[],
+        stores,
+        start,
+        end,
+    });
 }
