@@ -310,7 +310,7 @@ describe("buildMonthlyAttendanceSummary", () => {
         expect(result.totalWorkMinutes).toBe(0);
     });
 
-    test("月末をまたぐ退勤（clockOut >= end）は月次合計に含まれないこと", () => {
+    test("月末をまたぐ退勤（clockOut > end）のみ月次合計に含まれないこと", () => {
         const punchesAtEnd: MonthlyPunchRecord[] = [
             {
                 employee_id: EMP_ID,
@@ -358,8 +358,8 @@ describe("buildMonthlyAttendanceSummary", () => {
             end,
         });
 
-        expect(resultAtEnd.totalWorkMinutes).toBe(0);
-        expect(resultAtEnd.totalNightMinutes).toBe(0);
+        expect(resultAtEnd.totalWorkMinutes).toBe(360);
+        expect(resultAtEnd.totalNightMinutes).toBe(360);
         expect(resultOverEnd.totalWorkMinutes).toBe(0);
         expect(resultOverEnd.totalNightMinutes).toBe(0);
     });
@@ -501,7 +501,7 @@ describe("buildMonthlyAttendanceDetailRows", () => {
         expect(rows[0].nightMinutes).toBeNull();
     });
 
-    test("月末をまたぐ退勤（clockOut >= end）は 05:00 またぎとして未退勤扱いになること", () => {
+    test("月末をまたぐ退勤（clockOut > end）のみ 05:00 またぎとして未退勤扱いになること", () => {
         const punchesAtEnd: MonthlyPunchRecord[] = [
             {
                 employee_id: EMP_ID,
@@ -548,9 +548,9 @@ describe("buildMonthlyAttendanceDetailRows", () => {
         });
 
         expect(rowsAtEnd).toHaveLength(1);
-        expect(rowsAtEnd[0].status).toBe("working");
-        expect(rowsAtEnd[0].workMinutes).toBeNull();
-        expect(rowsAtEnd[0].nightMinutes).toBeNull();
+        expect(rowsAtEnd[0].status).toBe("completed");
+        expect(rowsAtEnd[0].workMinutes).toBe(360);
+        expect(rowsAtEnd[0].nightMinutes).toBe(360);
 
         expect(rowsOverEnd).toHaveLength(1);
         expect(rowsOverEnd[0].status).toBe("working");

@@ -1,4 +1,3 @@
-````markdown
 # アーキテクチャ（Architecture）
 
 ## 目的
