@@ -137,6 +137,7 @@ export async function getManagerStores(employeeId: string): Promise<StoreOption[
 
 /**
  * 指定月に所属していた全従業員の一覧を取得する。
+ * storeId と storeIds は同時指定不可。
  * storeId 指定時はその店舗のみ対象。未指定時は全店舗を対象にする。
  * 月の範囲と employee_stores の valid_from/valid_to を照合する。
  */
@@ -146,6 +147,13 @@ export async function getStaffList(params: {
     storeIds?: string[];
 }): Promise<{ employeeId: string; employeeName: string }[]> {
     const { yearMonth, storeId, storeIds } = params;
+
+    if (storeId !== undefined && storeIds !== undefined) {
+        throw new Error(
+            "storeId と storeIds は同時に指定できません。どちらか一方のみ指定してください。"
+        );
+    }
+
     const supabase = await createClient();
     const { firstDay, lastDay } = getMonthUTCRange(yearMonth);
 

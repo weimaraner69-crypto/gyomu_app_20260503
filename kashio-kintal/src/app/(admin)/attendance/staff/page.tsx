@@ -7,7 +7,11 @@ import {
     getMonthlyAttendanceViewData,
     getStaffList,
 } from "@/lib/attendance";
-import { getAdjacentMonth, getCurrentMonth } from "@/lib/attendance-utils";
+import {
+    getAdjacentMonth,
+    getCurrentMonth,
+    isValidYearMonth,
+} from "@/lib/attendance-utils";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StaffAttendanceClient } from "./StaffAttendanceClient";
@@ -32,13 +36,12 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
         return sp.toString();
     }
 
-    // month の形式検証：YYYY-MM 以外は当月にフォールバック
+    // month の厳密検証：不正値は当月へリダイレクト
     const currentMonth = getCurrentMonth();
     let yearMonth = currentMonth;
     const rawMonth = params.month ?? "";
-    if (rawMonth && /^\d{4}-\d{2}$/.test(rawMonth)) {
-        const m = parseInt(rawMonth.split("-")[1], 10);
-        if (m >= 1 && m <= 12) {
+    if (rawMonth) {
+        if (isValidYearMonth(rawMonth)) {
             yearMonth = rawMonth;
         } else {
             redirect(
@@ -49,14 +52,6 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
                 )}`
             );
         }
-    } else if (rawMonth) {
-        redirect(
-            `/admin/attendance/staff?${buildQuery(
-                currentMonth,
-                params.employee,
-                params.storeId
-            )}`
-        );
     }
 
     // manager は担当店舗のみ。owner / sharoushi は全店舗

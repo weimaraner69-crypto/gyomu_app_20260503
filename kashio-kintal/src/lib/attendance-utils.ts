@@ -298,6 +298,70 @@ export interface MonthlyPunchRecord {
     store_id: string;
 }
 
+type MonthlyPair = { clockIn: string; clockOut: string | null };
+
+/**
+ * 指定従業員・指定月範囲の打刻を店舗別にペアリングする。
+ * clockOut が end を超えるものは 05:00 またぎとして未退勤扱いにする。
+ */
+function buildMonthlyPairsByStore(params: {
+    employeeId: string;
+    punches: MonthlyPunchRecord[];
+    startMs: number;
+    endMs: number;
+}): Map<string, MonthlyPair[]> {
+    const { employeeId, punches, startMs, endMs } = params;
+    const empPunches = punches.filter((p) => p.employee_id === employeeId);
+    const pairsByStore = new Map<string, MonthlyPair[]>();
+
+    for (const p of empPunches) {
+        const pMs = new Date(p.punched_at).getTime();
+        if (p.punch_type === "clock_in" && pMs >= startMs && pMs < endMs) {
+            const pairs = pairsByStore.get(p.store_id) ?? [];
+            pairs.push({ clockIn: p.punched_at, clockOut: null });
+            pairsByStore.set(p.store_id, pairs);
+        }
+    }
+
+    for (const p of empPunches) {
+        if (p.punch_type !== "clock_out") continue;
+        const pairs = pairsByStore.get(p.store_id);
+        if (!pairs || pairs.length === 0) continue;
+        const pOutMs = new Date(p.punched_at).getTime();
+        if (pOutMs > endMs) continue;
+        for (const pair of pairs) {
+            if (pair.clockOut !== null) continue;
+            const pInMs = new Date(pair.clockIn).getTime();
+            if (pOutMs >= pInMs) {
+                pair.clockOut = p.punched_at;
+                break;
+            }
+        }
+    }
+
+    return pairsByStore;
+}
+
+/**
+ * 月パラメータ（YYYY-MM）を厳密検証する。
+ * Date.UTC は 0〜99 年を 1900 年台へ補正するため、UTC 往復で実在性を確認する。
+ */
+export function isValidYearMonth(value: string): boolean {
+    const match = /^(\d{4})-(\d{2})$/.exec(value);
+    if (!match) return false;
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    if (month < 1 || month > 12) return false;
+
+    const dt = new Date(Date.UTC(year, month - 1, 1));
+    return (
+        dt.getUTCFullYear() === year &&
+        dt.getUTCMonth() + 1 === month &&
+        dt.getUTCDate() === 1
+    );
+}
+
 /**
  * YYYY-MM 形式の月から月全体の UTC 範囲を返す（営業日区切り JST 05:00 適用）。
  * 範囲は 1日目の JST 05:00（UTC 前日 20:00）〜 末日の翌日 JST 05:00 まで。
@@ -370,48 +434,12 @@ export function buildMonthlyAttendanceSummary(params: {
         { workMinutes: number; nightMinutes: number }
     >();
 
-    // 従業員の打刻のみ抽出
-    const empPunches = punches.filter((p) => p.employee_id === employeeId);
-
-    // 店舗別に clock_in を収集し、対応する clock_out とペアにする
-    const openPairsByStore = new Map<string, { clockIn: string }[]>();
-
-    for (const p of empPunches) {
-        const pMs = new Date(p.punched_at).getTime();
-        if (p.punch_type === "clock_in" && pMs >= startMs && pMs < endMs) {
-            const pairs = openPairsByStore.get(p.store_id) ?? [];
-            pairs.push({ clockIn: p.punched_at });
-            openPairsByStore.set(p.store_id, pairs);
-        }
-    }
-
-    // clock_out をペアに対応付け
-    const completedPairsByStore = new Map<
-        string,
-        { clockIn: string; clockOut: string | null }[]
-    >();
-    for (const [storeId, pairs] of openPairsByStore) {
-        completedPairsByStore.set(
-            storeId,
-            pairs.map((p) => ({ ...p, clockOut: null }))
-        );
-    }
-
-    for (const p of empPunches) {
-        if (p.punch_type !== "clock_out") continue;
-        const pairs = completedPairsByStore.get(p.store_id);
-        if (!pairs || pairs.length === 0) continue;
-        const pOutMs = new Date(p.punched_at).getTime();
-        if (pOutMs > endMs) continue; // 05:00 またぎは未退勤扱い（月次確定値に含めない）
-        for (const pair of pairs) {
-            if (pair.clockOut !== null) continue;
-            const pInMs = new Date(pair.clockIn).getTime();
-            if (pOutMs >= pInMs) {
-                pair.clockOut = p.punched_at;
-                break;
-            }
-        }
-    }
+    const completedPairsByStore = buildMonthlyPairsByStore({
+        employeeId,
+        punches,
+        startMs,
+        endMs,
+    });
 
     // 店舗別集計
     for (const [storeId, pairs] of completedPairsByStore) {
@@ -492,33 +520,12 @@ export function buildMonthlyAttendanceDetailRows(params: {
     const endMs = new Date(end).getTime();
     const storeMap = new Map(stores.map((s) => [s.id, s.name]));
 
-    const empPunches = punches.filter((p) => p.employee_id === employeeId);
-    const pairsByStore = new Map<string, { clockIn: string; clockOut: string | null }[]>();
-
-    for (const p of empPunches) {
-        const pMs = new Date(p.punched_at).getTime();
-        if (p.punch_type === "clock_in" && pMs >= startMs && pMs < endMs) {
-            const pairs = pairsByStore.get(p.store_id) ?? [];
-            pairs.push({ clockIn: p.punched_at, clockOut: null });
-            pairsByStore.set(p.store_id, pairs);
-        }
-    }
-
-    for (const p of empPunches) {
-        if (p.punch_type !== "clock_out") continue;
-        const pairs = pairsByStore.get(p.store_id);
-        if (!pairs || pairs.length === 0) continue;
-        const pOutMs = new Date(p.punched_at).getTime();
-        if (pOutMs > endMs) continue; // 05:00 またぎは未退勤扱い
-        for (const pair of pairs) {
-            if (pair.clockOut !== null) continue;
-            const pInMs = new Date(pair.clockIn).getTime();
-            if (pOutMs >= pInMs) {
-                pair.clockOut = p.punched_at;
-                break;
-            }
-        }
-    }
+    const pairsByStore = buildMonthlyPairsByStore({
+        employeeId,
+        punches,
+        startMs,
+        endMs,
+    });
 
     const rows: MonthlyAttendanceDetailRow[] = [];
     for (const [storeId, pairs] of pairsByStore) {

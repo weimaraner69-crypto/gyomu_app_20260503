@@ -10,6 +10,7 @@ import {
     getAdjacentMonth,
     getCurrentMonth,
     getMonthUTCRange,
+    isValidYearMonth,
     type MonthlyPunchRecord,
     type StoreOption,
 } from "@/lib/attendance-utils";
@@ -114,6 +115,29 @@ describe("getMonthUTCRange", () => {
     test("firstDay は YYYY-MM-01 形式", () => {
         const { firstDay } = getMonthUTCRange("2026-05");
         expect(firstDay).toBe("2026-05-01");
+    });
+});
+
+// ─── isValidYearMonth ────────────────────────────────────────────────────────
+
+describe("isValidYearMonth", () => {
+    test("有効な YYYY-MM は true", () => {
+        expect(isValidYearMonth("2026-05")).toBe(true);
+    });
+
+    test("月が範囲外の場合は false", () => {
+        expect(isValidYearMonth("2026-00")).toBe(false);
+        expect(isValidYearMonth("2026-13")).toBe(false);
+    });
+
+    test("0〜99年の Date.UTC 補正値は false", () => {
+        expect(isValidYearMonth("0000-01")).toBe(false);
+        expect(isValidYearMonth("0099-12")).toBe(false);
+    });
+
+    test("形式不正は false", () => {
+        expect(isValidYearMonth("2026-5")).toBe(false);
+        expect(isValidYearMonth("abcd-ef")).toBe(false);
     });
 });
 
