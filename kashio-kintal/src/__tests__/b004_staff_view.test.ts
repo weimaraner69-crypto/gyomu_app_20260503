@@ -557,4 +557,62 @@ describe("buildMonthlyAttendanceDetailRows", () => {
         expect(rowsOverEnd[0].workMinutes).toBeNull();
         expect(rowsOverEnd[0].nightMinutes).toBeNull();
     });
+
+    test("兼務スタッフは同日・複数店舗の勤務が各店舗1行ずつ生成されること", () => {
+        const STORE_B = "store-b";
+        const multiStores: StoreOption[] = [
+            { id: STORE_A, name: "A店" },
+            { id: STORE_B, name: "B店" },
+        ];
+        const punches: MonthlyPunchRecord[] = [
+            // A店で午前勤務
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_in",
+                punched_at: "2026-05-20T00:00:00.000Z", // 09:00 JST
+                store_id: STORE_A,
+            },
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_out",
+                punched_at: "2026-05-20T04:00:00.000Z", // 13:00 JST
+                store_id: STORE_A,
+            },
+            // B店で午後勤務（同日）
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_in",
+                punched_at: "2026-05-20T06:00:00.000Z", // 15:00 JST
+                store_id: STORE_B,
+            },
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_out",
+                punched_at: "2026-05-20T10:00:00.000Z", // 19:00 JST
+                store_id: STORE_B,
+            },
+        ];
+
+        const rows = buildMonthlyAttendanceDetailRows({
+            employeeId: EMP_ID,
+            punches,
+            stores: multiStores,
+            start,
+            end,
+        });
+
+        // 同日に2行（店舗別）生成される
+        expect(rows).toHaveLength(2);
+        const rowA = rows.find((r) => r.storeId === STORE_A);
+        const rowB = rows.find((r) => r.storeId === STORE_B);
+        expect(rowA).toBeDefined();
+        expect(rowB).toBeDefined();
+        expect(rowA!.storeName).toBe("A店");
+        expect(rowA!.workMinutes).toBe(240); // 4時間
+        expect(rowB!.storeName).toBe("B店");
+        expect(rowB!.workMinutes).toBe(240); // 4時間
+        // 両行とも同じ日付
+        expect(rowA!.dateStr).toBe("2026-05-20");
+        expect(rowB!.dateStr).toBe("2026-05-20");
+    });
 });

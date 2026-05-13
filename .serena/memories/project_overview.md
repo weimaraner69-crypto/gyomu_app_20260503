@@ -1,3 +1,0 @@
-- 目的: Copilotエージェント駆動の開発オーケストレーション基盤と、kashio-kintal（Next.js勤怠アプリ）を含むモノレポ。
-- SSOT: docs/requirements.md, docs/policies.md, docs/constraints.md, docs/architecture.md, docs/plan.md。
-- 主技術: Python 3.11（pytest/ruff/mypy）, Next.js 16 + React 19 + TypeScript + Supabase。

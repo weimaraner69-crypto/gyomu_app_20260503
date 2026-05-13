@@ -1,4 +1,0 @@
-- ルートPython: pytest -q / ruff check . / mypy src
-- ルート開発補助: bash scripts/bootstrap.sh, bash scripts/setup_github.sh
-- フロント(kashio-kintal): npm run dev / npm run lint / npm test / npm run test:ci
-- GitHub確認: gh pr view <num>, gh pr checks <num> --watch

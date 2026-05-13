@@ -155,7 +155,9 @@ export async function getStaffList(params: {
         .lte("valid_from", lastDay)
         .or(`valid_to.is.null,valid_to.gte.${firstDay}`);
 
-    if (storeIds && storeIds.length > 0) {
+    if (storeIds !== undefined) {
+        // 空配列は「閲覧可能店舗なし」を意味するため即時空返却
+        if (storeIds.length === 0) return [];
         query = query.in("store_id", storeIds);
     } else if (storeId) {
         query = query.eq("store_id", storeId);
@@ -210,7 +212,9 @@ export async function getEmployeeStoreIdsForMonth(params: {
         .lte("valid_from", lastDay)
         .or(`valid_to.is.null,valid_to.gte.${firstDay}`);
 
-    if (managerStoreIds && managerStoreIds.length > 0) {
+    if (managerStoreIds !== undefined) {
+        // 空配列は「担当店舗なし」を意味するため即時空返却
+        if (managerStoreIds.length === 0) return [];
         query = query.in("store_id", managerStoreIds);
     }
 
@@ -255,7 +259,9 @@ async function getMonthlyAttendanceBase(params: {
         .lt("punched_at", extendedEnd)
         .order("punched_at", { ascending: true });
 
-    if (allowedStoreIds && allowedStoreIds.length > 0) {
+    if (allowedStoreIds !== undefined) {
+        // 空配列は「閲覧可能店舗なし」を意味するため即時空返却
+        if (allowedStoreIds.length === 0) return { punches: [], stores: [], start, end };
         punchQuery = punchQuery.in("store_id", allowedStoreIds);
     }
 

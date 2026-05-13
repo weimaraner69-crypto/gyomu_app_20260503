@@ -121,6 +121,14 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
                     >
                         翌月 →
                     </Link>
+                    {filterStoreId && (
+                        <Link
+                            className="rounded border px-3 py-1 text-sm hover:bg-gray-100"
+                            href={`/admin/attendance/staff?${buildQuery(yearMonth, undefined)}`}
+                        >
+                            全店舗を表示
+                        </Link>
+                    )}
                 </div>
             </main>
         );
@@ -145,10 +153,10 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
     const managerAllowedStoreIds =
         user.role === "manager"
             ? await getEmployeeStoreIdsForMonth({
-                  employeeId: selectedStaff.employeeId,
-                  yearMonth,
-                  managerStoreIds: stores.map((s) => s.id),
-              })
+                employeeId: selectedStaff.employeeId,
+                yearMonth,
+                managerStoreIds: stores.map((s) => s.id),
+            })
             : undefined;
 
     // manager は対象従業員の月内所属店舗に限定して取得（担当外店舗の閲覧防止）

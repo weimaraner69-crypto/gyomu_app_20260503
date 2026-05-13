@@ -419,16 +419,14 @@ export function buildMonthlyAttendanceSummary(params: {
         let nightMinutes = 0;
         for (const pair of pairs) {
             if (!pair.clockOut) continue; // 未退勤は月次確定値に含めない
+            // pair.clockOut はペアリング時に end 超過を排除済みのため endMs 以内が保証されている
             const pInMs = new Date(pair.clockIn).getTime();
-            const pOutMs = Math.min(
-                new Date(pair.clockOut).getTime(),
-                endMs // 月末またぎの場合は月末で切り捨て
-            );
+            const pOutMs = new Date(pair.clockOut).getTime();
             if (pOutMs > pInMs) {
                 workMinutes += Math.floor((pOutMs - pInMs) / 60000);
                 nightMinutes += calcNightMinutes(
                     pair.clockIn,
-                    new Date(pOutMs).toISOString()
+                    pair.clockOut
                 );
             }
         }
@@ -541,21 +539,18 @@ export function buildMonthlyAttendanceDetailRows(params: {
                 continue;
             }
 
+            // pair.clockOut はペアリング時に end 超過を排除済みのため endMs 以内が保証されている
             const pOutMs = new Date(pair.clockOut).getTime();
             if (pOutMs <= pInMs) continue;
 
-            const boundedOutMs = Math.min(pOutMs, endMs);
             rows.push({
                 dateStr: toBusinessDateJST(pair.clockIn),
                 storeId,
                 storeName,
                 clockIn: pair.clockIn,
                 clockOut: pair.clockOut,
-                workMinutes: Math.floor((boundedOutMs - pInMs) / 60000),
-                nightMinutes: calcNightMinutes(
-                    pair.clockIn,
-                    new Date(boundedOutMs).toISOString()
-                ),
+                workMinutes: Math.floor((pOutMs - pInMs) / 60000),
+                nightMinutes: calcNightMinutes(pair.clockIn, pair.clockOut),
                 status: "completed",
             });
         }
