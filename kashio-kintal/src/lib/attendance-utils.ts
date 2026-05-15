@@ -302,7 +302,7 @@ type MonthlyPair = { clockIn: string; clockOut: string | null };
 
 /**
  * 指定従業員・指定月範囲の打刻を店舗別にペアリングする。
- * clockOut が end を超えるものは 05:00 またぎとして未退勤扱いにする。
+ * clockOut が end 以上のものは 05:00 またぎとして未退勤扱いにする。
  */
 function buildMonthlyPairsByStore(params: {
     employeeId: string;
@@ -328,7 +328,7 @@ function buildMonthlyPairsByStore(params: {
         const pairs = pairsByStore.get(p.store_id);
         if (!pairs || pairs.length === 0) continue;
         const pOutMs = new Date(p.punched_at).getTime();
-        if (pOutMs > endMs) continue;
+        if (pOutMs >= endMs) continue;
         for (const pair of pairs) {
             if (pair.clockOut !== null) continue;
             const pInMs = new Date(pair.clockIn).getTime();
