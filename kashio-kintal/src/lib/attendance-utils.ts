@@ -70,7 +70,7 @@ export function getAdjacentDate(
  * 深夜帯: 22:00〜翌 5:00（JST）
  * clockOutISO が null の場合は現在時刻を使って概算する（勤務中扱い）。
  */
-export function calcNightMinutes(
+function calcNightMilliseconds(
     clockInISO: string,
     clockOutISO: string | null
 ): number {
@@ -95,7 +95,7 @@ export function calcNightMinutes(
         clockOutJST.getUTCDate()
     );
 
-    let nightMinutes = 0;
+    let nightMs = 0;
     let cursor = startDateUTC;
 
     while (cursor <= endDateUTC) {
@@ -112,13 +112,20 @@ export function calcNightMinutes(
         const overlapEnd = Math.min(clockOut.getTime(), night05);
 
         if (overlapEnd > overlapStart) {
-            nightMinutes += Math.floor((overlapEnd - overlapStart) / 60000);
+            nightMs += overlapEnd - overlapStart;
         }
 
         cursor += 24 * 60 * 60 * 1000;
     }
 
-    return nightMinutes;
+    return nightMs;
+}
+
+export function calcNightMinutes(
+    clockInISO: string,
+    clockOutISO: string | null
+): number {
+    return Math.floor(calcNightMilliseconds(clockInISO, clockOutISO) / 60000);
 }
 
 export type AttendancePunchType = "clock_in" | "clock_out";
@@ -429,10 +436,7 @@ export function buildMonthlyAttendanceSummary(params: {
     const endMs = new Date(end).getTime();
 
     const storeMap = new Map(stores.map((s) => [s.id, s.name]));
-    const breakdownMap = new Map<
-        string,
-        { workMinutes: number; nightMinutes: number }
-    >();
+    const breakdownMap = new Map<string, { workMs: number; nightMs: number }>();
 
     const completedPairsByStore = buildMonthlyPairsByStore({
         employeeId,
@@ -443,33 +447,32 @@ export function buildMonthlyAttendanceSummary(params: {
 
     // 店舗別集計
     for (const [storeId, pairs] of completedPairsByStore) {
-        let workMinutes = 0;
-        let nightMinutes = 0;
+        let workMs = 0;
+        let nightMs = 0;
         for (const pair of pairs) {
             if (!pair.clockOut) continue; // 未退勤は月次確定値に含めない
             // pair.clockOut はペアリング時に end 到達/超過を排除済みのため endMs 未満が保証されている
             const pInMs = new Date(pair.clockIn).getTime();
             const pOutMs = new Date(pair.clockOut).getTime();
             if (pOutMs > pInMs) {
-                workMinutes += Math.floor((pOutMs - pInMs) / 60000);
-                nightMinutes += calcNightMinutes(
-                    pair.clockIn,
-                    pair.clockOut
-                );
+                workMs += pOutMs - pInMs;
+                nightMs += calcNightMilliseconds(pair.clockIn, pair.clockOut);
             }
         }
-        if (workMinutes > 0 || nightMinutes > 0) {
-            breakdownMap.set(storeId, { workMinutes, nightMinutes });
+        if (workMs > 0 || nightMs > 0) {
+            breakdownMap.set(storeId, { workMs, nightMs });
         }
     }
 
     const storeBreakdowns: MonthlyStoreBreakdown[] = [];
     for (const [storeId, breakdown] of breakdownMap) {
+        const workMinutes = Math.floor(breakdown.workMs / 60000);
+        const nightMinutes = Math.floor(breakdown.nightMs / 60000);
         storeBreakdowns.push({
             storeId,
             storeName: storeMap.get(storeId) ?? storeId,
-            workMinutes: breakdown.workMinutes,
-            nightMinutes: breakdown.nightMinutes,
+            workMinutes,
+            nightMinutes,
         });
     }
     // 店舗名昇順

@@ -154,12 +154,19 @@ export default async function StaffAttendancePage({ searchParams }: PageProps) {
             })
             : undefined;
 
+    const allowedStoreIds =
+        user.role === "manager"
+            ? managerAllowedStoreIds
+            : filterStoreId
+                ? [filterStoreId]
+                : undefined;
+
     // manager は対象従業員の月内所属店舗に限定して取得（担当外店舗の閲覧防止）
     const viewData = await getMonthlyAttendanceViewData({
         employeeId: selectedStaff.employeeId,
         employeeName: selectedStaff.employeeName,
         yearMonth,
-        allowedStoreIds: managerAllowedStoreIds,
+        allowedStoreIds,
     });
 
     const isManager = user.role === "manager";

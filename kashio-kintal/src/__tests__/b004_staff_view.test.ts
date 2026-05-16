@@ -311,6 +311,49 @@ describe("buildMonthlyAttendanceSummary", () => {
         expect(result.storeBreakdowns).toHaveLength(0);
     });
 
+    test("同一店舗の複数勤務はミリ秒合算後に分丸めされること", () => {
+        const punches: MonthlyPunchRecord[] = [
+            // 60.5秒
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_in",
+                punched_at: "2026-05-10T00:00:00.000Z",
+                store_id: STORE_A,
+            },
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_out",
+                punched_at: "2026-05-10T00:01:00.500Z",
+                store_id: STORE_A,
+            },
+            // 60.5秒
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_in",
+                punched_at: "2026-05-10T01:00:00.000Z",
+                store_id: STORE_A,
+            },
+            {
+                employee_id: EMP_ID,
+                punch_type: "clock_out",
+                punched_at: "2026-05-10T01:01:00.500Z",
+                store_id: STORE_A,
+            },
+        ];
+
+        const result = buildMonthlyAttendanceSummary({
+            employeeId: EMP_ID,
+            employeeName: "テスト太郎",
+            punches,
+            stores,
+            start,
+            end,
+        });
+
+        // 60.5秒 × 2 = 121秒 → 2分（ペアごと丸めなら1分になってしまう）
+        expect(result.totalWorkMinutes).toBe(2);
+    });
+
     test("未退勤（clockOut === null）は月次合計に含まれないこと", () => {
         const punches: MonthlyPunchRecord[] = [
             {
