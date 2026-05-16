@@ -447,7 +447,7 @@ export function buildMonthlyAttendanceSummary(params: {
         let nightMinutes = 0;
         for (const pair of pairs) {
             if (!pair.clockOut) continue; // 未退勤は月次確定値に含めない
-            // pair.clockOut はペアリング時に end 超過を排除済みのため endMs 以内が保証されている
+            // pair.clockOut はペアリング時に end 到達/超過を排除済みのため endMs 未満が保証されている
             const pInMs = new Date(pair.clockIn).getTime();
             const pOutMs = new Date(pair.clockOut).getTime();
             if (pOutMs > pInMs) {
@@ -546,7 +546,7 @@ export function buildMonthlyAttendanceDetailRows(params: {
                 continue;
             }
 
-            // pair.clockOut はペアリング時に end 超過を排除済みのため endMs 以内が保証されている
+            // pair.clockOut はペアリング時に end 到達/超過を排除済みのため endMs 未満が保証されている
             const pOutMs = new Date(pair.clockOut).getTime();
             if (pOutMs <= pInMs) continue;
 
