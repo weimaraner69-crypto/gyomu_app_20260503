@@ -70,7 +70,7 @@ export function getAdjacentDate(
  * 深夜帯: 22:00〜翌 5:00（JST）
  * clockOutISO が null の場合は現在時刻を使って概算する（勤務中扱い）。
  */
-export function calcNightMinutes(
+function calcNightMilliseconds(
     clockInISO: string,
     clockOutISO: string | null
 ): number {
@@ -95,7 +95,7 @@ export function calcNightMinutes(
         clockOutJST.getUTCDate()
     );
 
-    let nightMinutes = 0;
+    let nightMs = 0;
     let cursor = startDateUTC;
 
     while (cursor <= endDateUTC) {
@@ -112,13 +112,20 @@ export function calcNightMinutes(
         const overlapEnd = Math.min(clockOut.getTime(), night05);
 
         if (overlapEnd > overlapStart) {
-            nightMinutes += Math.floor((overlapEnd - overlapStart) / 60000);
+            nightMs += overlapEnd - overlapStart;
         }
 
         cursor += 24 * 60 * 60 * 1000;
     }
 
-    return nightMinutes;
+    return nightMs;
+}
+
+export function calcNightMinutes(
+    clockInISO: string,
+    clockOutISO: string | null
+): number {
+    return Math.floor(calcNightMilliseconds(clockInISO, clockOutISO) / 60000);
 }
 
 export type AttendancePunchType = "clock_in" | "clock_out";
@@ -257,4 +264,313 @@ export function buildDailyAttendanceRecords(params: {
         completed: 2,
     };
     return records.sort((a, b) => order[a.status] - order[b.status]);
+}
+
+// ─── 月次集計 ───────────────────────────────────────────────
+
+/** 店舗別の月次勤怠サマリー */
+export interface MonthlyStoreBreakdown {
+    storeId: string;
+    storeName: string;
+    workMinutes: number;
+    nightMinutes: number;
+}
+
+/** 従業員の月次勤怠サマリー */
+export interface MonthlyAttendanceSummary {
+    employeeId: string;
+    employeeName: string;
+    storeBreakdowns: MonthlyStoreBreakdown[];
+    totalWorkMinutes: number;
+    totalNightMinutes: number;
+}
+
+/** 人別ビューの明細行 */
+export interface MonthlyAttendanceDetailRow {
+    dateStr: string; // YYYY-MM-DD (JST営業日)
+    storeId: string;
+    storeName: string;
+    clockIn: string;
+    clockOut: string | null;
+    workMinutes: number | null;
+    nightMinutes: number | null;
+    status: "working" | "completed";
+}
+
+/** 月次集計用の打刻レコード（store_id を含む） */
+export interface MonthlyPunchRecord {
+    employee_id: string;
+    punch_type: AttendancePunchType;
+    punched_at: string;
+    store_id: string;
+}
+
+type MonthlyPair = { clockIn: string; clockOut: string | null };
+
+/**
+ * 指定従業員・指定月範囲の打刻を店舗別にペアリングする。
+ * clockOut が end 以上のものは 05:00 またぎとして未退勤扱いにする。
+ */
+function buildMonthlyPairsByStore(params: {
+    employeeId: string;
+    punches: MonthlyPunchRecord[];
+    startMs: number;
+    endMs: number;
+}): Map<string, MonthlyPair[]> {
+    const { employeeId, punches, startMs, endMs } = params;
+    const empPunches = punches.filter((p) => p.employee_id === employeeId);
+    const pairsByStore = new Map<string, MonthlyPair[]>();
+
+    for (const p of empPunches) {
+        const pMs = new Date(p.punched_at).getTime();
+        if (p.punch_type === "clock_in" && pMs >= startMs && pMs < endMs) {
+            const pairs = pairsByStore.get(p.store_id) ?? [];
+            pairs.push({ clockIn: p.punched_at, clockOut: null });
+            pairsByStore.set(p.store_id, pairs);
+        }
+    }
+
+    for (const p of empPunches) {
+        if (p.punch_type !== "clock_out") continue;
+        const pairs = pairsByStore.get(p.store_id);
+        if (!pairs || pairs.length === 0) continue;
+        const pOutMs = new Date(p.punched_at).getTime();
+        if (pOutMs >= endMs) continue;
+        for (const pair of pairs) {
+            if (pair.clockOut !== null) continue;
+            const pInMs = new Date(pair.clockIn).getTime();
+            if (pOutMs >= pInMs) {
+                pair.clockOut = p.punched_at;
+                break;
+            }
+        }
+    }
+
+    return pairsByStore;
+}
+
+/**
+ * 月パラメータ（YYYY-MM）を厳密検証する。
+ * Date.UTC は 0〜99 年を 1900 年台へ補正するため、UTC 往復で実在性を確認する。
+ */
+export function isValidYearMonth(value: string): boolean {
+    const match = /^(\d{4})-(\d{2})$/.exec(value);
+    if (!match) return false;
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    if (month < 1 || month > 12) return false;
+
+    const dt = new Date(Date.UTC(year, month - 1, 1));
+    return (
+        dt.getUTCFullYear() === year &&
+        dt.getUTCMonth() + 1 === month &&
+        dt.getUTCDate() === 1
+    );
+}
+
+/**
+ * YYYY-MM 形式の月から月全体の UTC 範囲を返す（営業日区切り JST 05:00 適用）。
+ * 範囲は 1日目の JST 05:00（UTC 前日 20:00）〜 末日の翌日 JST 05:00 まで。
+ */
+export function getMonthUTCRange(yearMonth: string): {
+    start: string;
+    end: string;
+    firstDay: string;
+    lastDay: string;
+} {
+    const [year, month] = yearMonth.split("-").map(Number);
+    const firstDay = `${year}-${String(month).padStart(2, "0")}-01`;
+    const lastDayNum = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const lastDay = `${year}-${String(month).padStart(2, "0")}-${String(lastDayNum).padStart(2, "0")}`;
+    const { start } = getDateUTCRange(firstDay);
+    const { end } = getDateUTCRange(lastDay);
+    return { start, end, firstDay, lastDay };
+}
+
+/** YYYY-MM の前月・翌月を返す */
+export function getAdjacentMonth(
+    yearMonth: string,
+    direction: "prev" | "next"
+): string {
+    const [year, month] = yearMonth.split("-").map(Number);
+    const base = new Date(Date.UTC(year, month - 1, 1));
+    base.setUTCMonth(base.getUTCMonth() + (direction === "prev" ? -1 : 1));
+    const y = base.getUTCFullYear();
+    const m = String(base.getUTCMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+}
+
+/** 現在月の YYYY-MM を返す（JST 基準） */
+export function getCurrentMonth(nowMs: number = Date.now()): string {
+    const jstOffsetMs = 9 * 60 * 60 * 1000;
+    const businessDayStartHour = 5;
+    const now = new Date(nowMs + jstOffsetMs);
+    // 00:00〜04:59 は前営業日扱いのため、月判定も前日側に寄せる
+    if (now.getUTCHours() < businessDayStartHour) {
+        now.setUTCDate(now.getUTCDate() - 1);
+    }
+    const y = now.getUTCFullYear();
+    const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+}
+
+/**
+ * 月全体の打刻一覧から従業員の月次勤怠サマリーを組み立てる純関数。
+ *
+ * - clock_in は月の UTC 範囲 [start, end) 内のものを対象にする
+ * - 月末をまたぐペア（clockOut が end を超える）は 05:00 またぎとして未退勤扱いにする
+ * - 未退勤（clockOut === null）は勤務時間 0 として扱う（月次集計の確定値のみ対象）
+ */
+export function buildMonthlyAttendanceSummary(params: {
+    employeeId: string;
+    employeeName: string;
+    punches: MonthlyPunchRecord[];
+    stores: StoreOption[];
+    start: string;
+    end: string;
+}): MonthlyAttendanceSummary {
+    const { employeeId, employeeName, punches, stores, start, end } = params;
+
+    const startMs = new Date(start).getTime();
+    const endMs = new Date(end).getTime();
+
+    const storeMap = new Map(stores.map((s) => [s.id, s.name]));
+    const breakdownMap = new Map<string, { workMs: number; nightMs: number }>();
+
+    const completedPairsByStore = buildMonthlyPairsByStore({
+        employeeId,
+        punches,
+        startMs,
+        endMs,
+    });
+
+    // 店舗別集計
+    for (const [storeId, pairs] of completedPairsByStore) {
+        let workMs = 0;
+        let nightMs = 0;
+        for (const pair of pairs) {
+            if (!pair.clockOut) continue; // 未退勤は月次確定値に含めない
+            // pair.clockOut はペアリング時に end 到達/超過を排除済みのため endMs 未満が保証されている
+            const pInMs = new Date(pair.clockIn).getTime();
+            const pOutMs = new Date(pair.clockOut).getTime();
+            if (pOutMs > pInMs) {
+                workMs += pOutMs - pInMs;
+                nightMs += calcNightMilliseconds(pair.clockIn, pair.clockOut);
+            }
+        }
+        if (workMs > 0 || nightMs > 0) {
+            breakdownMap.set(storeId, { workMs, nightMs });
+        }
+    }
+
+    const storeBreakdowns: MonthlyStoreBreakdown[] = [];
+    for (const [storeId, breakdown] of breakdownMap) {
+        const workMinutes = Math.floor(breakdown.workMs / 60000);
+        const nightMinutes = Math.floor(breakdown.nightMs / 60000);
+        storeBreakdowns.push({
+            storeId,
+            storeName: storeMap.get(storeId) ?? storeId,
+            workMinutes,
+            nightMinutes,
+        });
+    }
+    // 店舗名昇順
+    storeBreakdowns.sort((a, b) => a.storeName.localeCompare(b.storeName, "ja"));
+
+    const totalWorkMinutes = storeBreakdowns.reduce(
+        (acc, s) => acc + s.workMinutes,
+        0
+    );
+    const totalNightMinutes = storeBreakdowns.reduce(
+        (acc, s) => acc + s.nightMinutes,
+        0
+    );
+
+    return {
+        employeeId,
+        employeeName,
+        storeBreakdowns,
+        totalWorkMinutes,
+        totalNightMinutes,
+    };
+}
+
+/** ISO UTC を JST 営業日（05:00区切り）の YYYY-MM-DD に変換 */
+function toBusinessDateJST(isoUtc: string): string {
+    const jstOffsetMs = 9 * 60 * 60 * 1000;
+    const businessDayStartHour = 5;
+    const d = new Date(new Date(isoUtc).getTime() + jstOffsetMs);
+    if (d.getUTCHours() < businessDayStartHour) {
+        d.setUTCDate(d.getUTCDate() - 1);
+    }
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+}
+
+/** 月全体の打刻一覧から人別ビューの明細行を組み立てる */
+export function buildMonthlyAttendanceDetailRows(params: {
+    employeeId: string;
+    punches: MonthlyPunchRecord[];
+    stores: StoreOption[];
+    start: string;
+    end: string;
+}): MonthlyAttendanceDetailRow[] {
+    const { employeeId, punches, stores, start, end } = params;
+    const startMs = new Date(start).getTime();
+    const endMs = new Date(end).getTime();
+    const storeMap = new Map(stores.map((s) => [s.id, s.name]));
+
+    const pairsByStore = buildMonthlyPairsByStore({
+        employeeId,
+        punches,
+        startMs,
+        endMs,
+    });
+
+    const rows: MonthlyAttendanceDetailRow[] = [];
+    for (const [storeId, pairs] of pairsByStore) {
+        for (const pair of pairs) {
+            const pInMs = new Date(pair.clockIn).getTime();
+            const storeName = storeMap.get(storeId) ?? storeId;
+            if (!pair.clockOut) {
+                rows.push({
+                    dateStr: toBusinessDateJST(pair.clockIn),
+                    storeId,
+                    storeName,
+                    clockIn: pair.clockIn,
+                    clockOut: null,
+                    workMinutes: null,
+                    nightMinutes: null,
+                    status: "working",
+                });
+                continue;
+            }
+
+            // pair.clockOut はペアリング時に end 到達/超過を排除済みのため endMs 未満が保証されている
+            const pOutMs = new Date(pair.clockOut).getTime();
+            if (pOutMs <= pInMs) continue;
+
+            rows.push({
+                dateStr: toBusinessDateJST(pair.clockIn),
+                storeId,
+                storeName,
+                clockIn: pair.clockIn,
+                clockOut: pair.clockOut,
+                workMinutes: Math.floor((pOutMs - pInMs) / 60000),
+                nightMinutes: calcNightMinutes(pair.clockIn, pair.clockOut),
+                status: "completed",
+            });
+        }
+    }
+
+    rows.sort((a, b) => {
+        const aMs = new Date(a.clockIn).getTime();
+        const bMs = new Date(b.clockIn).getTime();
+        return aMs - bMs;
+    });
+
+    return rows;
 }
